@@ -1,0 +1,46 @@
+"Notes"	"County"	"County Code"	Deaths	Population	Crude Rate	Crude Rate Lower 95% Confidence Interval	Crude Rate Upper 95% Confidence Interval	Crude Rate Standard Error
+	"Fairfield County, CT"	"09001"	888	943332	94.134	87.943	100.326	3.159
+	"Hartford County, CT"	"09003"	933	891720	104.629	97.915	111.343	3.425
+	"Litchfield County, CT"	"09005"	225	180333	124.769	108.466	141.072	8.318
+	"Middlesex County, CT"	"09007"	193	162436	118.816	102.053	135.579	8.553
+	"New Haven County, CT"	"09009"	836	854757	97.806	91.176	104.436	3.383
+	"New London County, CT"	"09011"	321	265206	121.038	107.797	134.279	6.756
+	"Tolland County, CT"	"09013"	189	150721	125.397	107.519	143.275	9.121
+	"Windham County, CT"	"09015"	155	116782	132.726	111.831	153.621	10.661
+"Total"			3740	3565287	104.900	101.538	108.262	1.715
+"---"
+"Dataset: Underlying Cause of Death, 2018-2021, Single Race"
+"Query Parameters:"
+"ICD-10 Codes: I20-I25 (Ischaemic heart diseases)"
+"States: Connecticut (09)"
+"Year/Month: 2019"
+"Group By: County"
+"Show Totals: True"
+"Show Zero Values: False"
+"Show Suppressed: False"
+"Calculate Rates Per: 100,000"
+"Rate Options: Default intercensal populations for years 2001-2009 (except Infant Age Groups)"
+"---"
+"Help: See http://wonder.cdc.gov/wonder/help/ucd-expanded.html for more information."
+"---"
+"Query Date: Jun 25, 2023 1:49:54 PM"
+"---"
+"Suggested Citation: Centers for Disease Control and Prevention, National Center for Health Statistics. National Vital Statistics"
+"System, Mortality 2018-2021 on CDC WONDER Online Database, released in 2021. Data are from the Multiple Cause of Death Files,"
+"2018-2021, as compiled from data provided by the 57 vital statistics jurisdictions through the Vital Statistics Cooperative"
+"Program. Accessed at http://wonder.cdc.gov/ucd-icd10-expanded.html on Jun 25, 2023 1:49:54 PM"
+"---"
+Caveats:
+"1. The method used to calculate 95% confidence intervals is documented here: More information:"
+"http://wonder.cdc.gov/wonder/help/ucd-expanded.html#Confidence-Intervals."
+"2. The method used to calculate standard errors is documented here: More information:"
+"http://wonder.cdc.gov/wonder/help/ucd-expanded.html#Standard-Errors."
+"3. The population figures for year 2021 are single-race estimates of the July 1 resident population, from the Vintage 2021"
+"postcensal series released by the Census Bureau on June 30, 2022. The population figures for year 2020 are single-race estimates"
+"of the July 1 resident population, from the Vintage 2020 postcensal series released by the Census Bureau on July 27, 2021. The"
+"population figures for year 2019 are single-race estimates of the July 1 resident population, from the Vintage 2019 postcensal"
+"series released by the Census Bureau on June 25, 2020. The population figures for year 2018 are single-race estimates of the"
+"July 1 resident population, from the Vintage 2018 postcensal series released by the Census Bureau on June 20, 2019."
+"4. The population figures used in the calculation of death rates for the age group 'under 1 year' are the estimates of the"
+"resident population that is under one year of age. More information: http://wonder.cdc.gov/wonder/help/ucd-expanded.html#Age"
+"Group."

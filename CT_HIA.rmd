@@ -3,15 +3,15 @@ title: "Health Impact Assessment of Affordable Housing Development in Connecticu
 output:
   html_document:
     df_print: paged
-  word_document: default
 ---
 
 ```{r load packages, message=FALSE, warning=FALSE}
 library(tidyverse)
 library(sf)
 library(here)
+library(readxl)
 library(ncdf4)
-library(raster)
+#library(raster)
 #library(rgeos)
 #library(rgdal)
 library(tidycensus)
@@ -48,7 +48,7 @@ housing_town <- read.csv("Affordable_Housing_by_Town_2011-2022.csv") %>%
   mutate(`At least 10%?` = cut(`Percent.Affordable`, breaks = c(0,9.99999,100),
   labels = c("No", "Yes"))) %>% 
   rename("TOWN_NAME" = "Town") %>% 
-  mutate(`Units Needed` = (1-(`Percent.Affordable`/10))*`X2010.Census.Units`*(1/9))
+  mutate(`Units Needed` = ceiling((1-(`Percent.Affordable`/10))*`X2010.Census.Units`*(1/9)))
 
 # set units needed to 0 for towns already at or above 10% threshold
 housing_town$`Units Needed`[housing_town$`At least 10%` == "Yes"] = 0
@@ -56,23 +56,51 @@ housing_town$`Units Needed`[housing_town$`At least 10%` == "Yes"] = 0
 
 ```{r load incidence datasets}
 # read county-level all-cause mortality rates from CDC WONDER
-allcause <- read.delim("Underlying Cause of Death, 2018-2021, Single Race (2).txt", sep = "\t")[1:8,-1]
+allcause <- read.delim("Underlying Cause of Death, 2018-2021, Single Race_STATE.txt", sep = "\t")[1:2,-1]
 ```
 
 ```{r get list of ACS variables}
-# list of ACS variable names for reference
+# list of 5-year ACS variables for reference
 vars <- load_variables(year = 2019, dataset = "acs5", cache = TRUE)
 ```
 
 ```{r load shapefiles and population data for CT census tracts}
 options(tigris_use_cache = TRUE)
 
-# get CT census tract polygon
+# get CT census tract polygon using variable for families in poverty
 ct_tracts <- get_acs(state = "CT", geography = "tract", variables = "B17013_002", geometry = TRUE, year = 2019) %>% 
 ## join PM2.5 data
   left_join(., pm_tract, by = "GEOID") %>% 
 ## join ozone data
   left_join(., o3_tract, by = "GEOID")
+
+# get estimates of households in each income bracket by town
+township_incomes <- get_acs(geography = "county subdivision", state = "CT", table = "B19001", year = 2019, output = "tidy")
+
+# pull low-income limits by town
+AMI_limits <- read_excel(here("Section8-FY19.xlsx")) %>% 
+  filter(state_name == "Connecticut") %>% 
+  select(GEOID = fips2010, TOWN_NAME = county_town_name, limit = l80_4)
+
+# merge township data
+township_data <- left_join(AMI_limits, township_incomes, by = "GEOID") %>% 
+  # clean town name
+  mutate(TOWN_NAME = str_sub(TOWN_NAME, 1, nchar(TOWN_NAME) - 5))
+
+# merge maximum incomes for each bracket with township data 
+variable <- c("B19001_002", "B19001_003", "B19001_004", "B19001_005", "B19001_006", "B19001_007", "B19001_008", "B19001_009", "B19001_010", "B19001_011", "B19001_012", "B19001_013", "B19001_014", "B19001_015", "B19001_016", "B19001_017")
+max_income <- c(9999, 14999, 19999, 24999, 29999, 34999, 39999, 44999, 49999, 59999, 74999, 99999, 124999, 149999, 199999, 200000)
+income_brackets <- data.frame(variable, max_income)
+low_income <- left_join(income_brackets, township_data, by = "variable")
+
+# sum to find total low-income households (at or below 80% AMI)
+low_income_pop <- low_income %>% 
+  mutate(below_ami = case_when(max_income <= limit ~ estimate, max_income > limit ~ 0)) %>% 
+  group_by(TOWN_NAME) %>% 
+  summarize(total_at_or_below_ami = sum(below_ami)) %>% 
+  # join housing by town
+  left_join(housing_town, by = "TOWN_NAME") %>% 
+  select(TOWN_NAME, total_at_or_below_ami, `Units Needed`)
 ```
 
 ```{r load shapefiles for CT townships}
@@ -82,9 +110,12 @@ town_lines <- st_read("CT Town Lines/Town_Lines.shp")
 # read CT town polygon
 town_poly <- st_read("CT Vicinity Town Polygon/CT_Vicinity_Town_Polygon.shp") %>%
   filter(STATE_COD == "CT", is.na(TOWN_NAME) == FALSE) 
-# join housing data by town - using inner over left join to exclude area of Long Island Sound
+
 town_polygon <- town_poly %>% 
-  inner_join(., housing_town, by = "TOWN_NAME")
+  # join housing data by town - using inner join to exclude area of Long Island Sound
+  inner_join(housing_town, by = "TOWN_NAME") %>% 
+  #join population with low income by town
+  left_join(low_income_pop, by = "TOWN_NAME")
 ```
 
 ```{r aggregate tract-level exposures by township}
@@ -92,36 +123,34 @@ town_polygon <- town_poly %>%
 tract_town <- read.csv("Census_Tracts_with_Town_Names__2010_.csv") %>% 
 ## join families by tract to towns by tract
   mutate(GEOID = str_pad(GEOID, 11, side = "left", pad = "0")) %>% 
-  right_join(ct_tracts, by = "GEOID") %>%
+  select(GEOID, TOWN_NAME = Town) %>% 
 ## clean rows - delete undefined township, for now keeping rows with no exposure data (East Lyme, Wolcott)
-  filter(`Town` != "County subdivisions not defined") 
+  filter(TOWN_NAME != "County subdivisions not defined")
 
 ## clean rows - assign tracts with multiple towns and 0 families to one town
-tract_town$Town[tract_town$Town == "East Granby, Windsor Locks, Suffield"] <- "East Granby"
-tract_town$Town[tract_town$Town == "Groton, Ledyard"] <- "Groton"
-tract_town$Town[tract_town$Town == "Norwalk, Darien, Greenwich, Stamford, Westport"] <- "Norwalk"
+tract_town$TOWN_NAME[tract_town$TOWN_NAME == "East Granby, Windsor Locks, Suffield"] <- "East Granby"
+tract_town$TOWN_NAME[tract_town$TOWN_NAME == "Groton, Ledyard"] <- "Groton"
+tract_town$TOWN_NAME[tract_town$TOWN_NAME == "Norwalk, Darien, Greenwich, Stamford, Westport"] <- "Norwalk"
 
-## assigning all 20 families in tract to Union, this is the only tract containing Union
-tract_town$Town[tract_town$Town == "Stafford, Union"] <- "Union" 
+## assigning Union township to only tract containing Union
+tract_town$TOWN_NAME[tract_town$TOWN_NAME == "Stafford, Union"] <- "Union" 
 
-## splitting "Canaan, Norfolk" estimate among both since both are only found in this tract
-tract_town <- tract_town %>% bind_rows(slice(., which(tract_town$Town == "Canaan, Norfolk"))) 
-tract_town$Town[tract_town$Town == "Canaan, Norfolk"] <- "Canaan"
-tract_town$Town[nrow(tract_town)] <- "Norfolk"
-tract_town$estimate[tract_town$Town == "Canaan"] <- floor(tract_town$estimate[642]/2)
-tract_town$estimate[tract_town$Town == "Norfolk"] <- ceiling(tract_town$estimate[833]/2)
+## splitting "Canaan, Norfolk" tract among both towns since both are only found in this tract
+tract_town <- tract_town %>% bind_rows(slice(., which(tract_town$TOWN_NAME == "Canaan, Norfolk"))) 
+tract_town$TOWN_NAME[tract_town$TOWN_NAME == "Canaan, Norfolk"] <- "Canaan"
+tract_town$TOWN_NAME[nrow(tract_town)] <- "Norfolk"
 
 # summarize mean PM2.5 and standard deviation of tract-level estimates by town
 pm_town <- tract_town %>%
-  rename(`TOWN_NAME` = `Town`) %>% 
+  right_join(pm_tract, by = "GEOID") %>%
   group_by(`TOWN_NAME`) %>% 
-  summarize(`Average PM2.5 (ug/m3)` = mean(`pm25_daily_average.ug.m3.`, na.rm = TRUE), `Standard Deviation (ug/m3)` = sd(`pm25_daily_average.ug.m3.`, na.rm = TRUE), `Min` = min(`pm25_daily_average.ug.m3.`, na.rm = TRUE), `Max` = max(`pm25_daily_average.ug.m3.`, na.rm = TRUE))
+  summarize(pm_mean = mean(`pm25_daily_average.ug.m3.`, na.rm = TRUE), `Standard Deviation (ug/m3)` = sd(`pm25_daily_average.ug.m3.`, na.rm = TRUE), `Min` = min(`pm25_daily_average.ug.m3.`, na.rm = TRUE), `Max` = max(`pm25_daily_average.ug.m3.`, na.rm = TRUE), `IQR (ug/m3)` = IQR(`pm25_daily_average.ug.m3.`, na.rm = TRUE))
 
 # summarize mean and standard deviation of tract-level ozone estimates by town
 o3_town <- tract_town %>%
-  rename(`TOWN_NAME` = `Town`) %>% 
+  right_join(o3_tract, by = "GEOID") %>%
   group_by(`TOWN_NAME`) %>% 
-  summarize(`Average O3 (ppb)` = mean(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE), `Standard Deviation (ppb)` = sd(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE), `Min O3` = min(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE), `Max O3` = max(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE)) 
+  summarize(o3_mean = mean(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE), `Standard Deviation (ppb)` = sd(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE), `Min O3` = min(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE), `Max O3` = max(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE), `IQR (ppb)` = IQR(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE)) 
 
 # join to town polygon
 pm_town_sf <- town_polygon %>% 
@@ -129,13 +158,6 @@ pm_town_sf <- town_polygon %>%
 
 o3_town_sf <- town_polygon %>% 
   left_join(o3_town, by = "TOWN_NAME")
-
-# summarize families by town and join housing by town
-pop_town <- tract_town %>% 
-  group_by(`Town`) %>% 
-  summarize(`Families Pre` = sum(`estimate`)) %>%
-  rename(`TOWN_NAME` = `Town`) %>% 
-  full_join(housing_town, by = "TOWN_NAME")
 ```
 
 ```{r map exposure contrast within townships}
@@ -154,6 +176,14 @@ ggplot() + geom_sf(data = ct_tracts, aes(fill = pm25_daily_average_stderr.ug.m3.
 # map ozone standard error by census tract with town lines
 ggplot() + geom_sf(data = ct_tracts, aes(fill = ozone_daily_8hour_maximum_stderr.ppb.)) + 
   scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
+
+# map PM2.5 standard deviation by town
+ggplot() + geom_sf(data = pm_town_sf, aes(fill = `IQR (ug/m3)`)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1)
+
+# map ozone standard deviation by town
+ggplot() + geom_sf(data = o3_town_sf, aes(fill = `IQR (ppb)`)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1)
 ```
 
 ```{r map baseline pollution by census tract}
@@ -187,155 +217,264 @@ ggplot() + geom_sf(data = town_polygon, aes(fill = `At least 10%?`))
 ```
 
 ```{r map baseline population by census tract}
-# map families below poverty level by census tract
+# map families below poverty level by census tract - previous estimate used
 ggplot() + geom_sf(data = ct_tracts, aes(fill = estimate)) + 
   scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
 
-# map low-income population by census tract
-
-# map rent burdened population by census tract
-
-```
-
-```{r map baseline incidence by census tract}
-# map baseline incidence of heart disease mortality by census tract
-
+# map low-income population by census tract - new estimate used
+ggplot() + geom_sf(data = town_polygon, aes(fill = total_at_or_below_ami)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
 ```
 
 ```{r map baseline pollution by township}
 # map PM2.5 by town
-ggplot() + geom_sf(data = pm_town_sf, aes(fill = `Average PM2.5 (ug/m3)`)) + 
+ggplot() + geom_sf(data = pm_town_sf, aes(fill = pm_mean)) + 
   scale_fill_viridis_c(option = "magma", direction = -1)
 ```
 
+# Simulate movement into new housing with inverse distance weighting penalty
 
-# SIMULATION V1 - no IDW penalty
-
-```{r simulate movement of families}
-# simulate random movement into new units
-pop_town <- pop_town %>% 
-  mutate(`Moved In` = rpois(nrow(.), round(`Units Needed`, 0)))
-
-# list towns pre-move by family (one row per family) and draw random sample (moving out) equal to number of families moved in
-moved_out_from <- rep(pop_town$TOWN_NAME, times = pop_town$`Families Pre`) %>% 
-  sample(sum(pop_town$`Moved In`), replace = FALSE) 
-
-# summarize families moved out by town and join pop_town
-pop_town_moved <- moved_out_from %>%
-  data.frame() %>% 
-  rename(`TOWN_NAME` = 1) %>% 
-  group_by(`TOWN_NAME`) %>% 
-  summarize(`Moved Out` = n()) %>% 
-  full_join(pop_town, by = "TOWN_NAME")
-
-# replace NA's for number moved out with 0's (towns not drawn in sample of families)
-pop_town_moved$`Moved Out`[is.na(pop_town_moved$`Moved Out`)] <- 0
-
-# subtract families moved out and add families moved in to initial estimate for final estimate
-pop_town_moved <- pop_town_moved %>% 
-  mutate(`Families Post` = `Families Pre` + `Moved In` - `Moved Out`)
-
-#join to town polygon
-towns_moved <- town_polygon %>% 
-  left_join(pop_town_moved, by = "TOWN_NAME")
-
-# check that total families moved in and moved out match - value will vary with each simulation
-sum(pop_town_moved$`Moved Out`)
-sum(pop_town_moved$`Moved In`)
-
-# check that total families pre and post match - value should match Census estimate
-sum(pop_town_moved$`Families Pre`)
-sum(pop_town_moved$`Families Post`)
-sum(ct_tracts$estimate)
-```
-
-```{r map population by town pre and post move}
-# map families by town pre-move
-ggplot() + geom_sf(data = towns_moved, aes(fill = `Families Pre`)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
-
-# map families by town post-move
-ggplot() + geom_sf(data = towns_moved, aes(fill = `Families Post`)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
-
-# map families moving out or staying
-ggplot() + geom_sf(data = towns_moved, aes(fill = `Moved Out`)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
-
-# map families moving in or staying
-ggplot() + geom_sf(data = towns_moved, aes(fill = `Moved In`)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
-```
-
-```{r estimate change in incidence}
-# assign baseline incidence by town
-ischemic_town <- town_polygon %>%
-  select(`CNTY_NAME`, `TOWN_NAME`) %>% 
-  left_join(ischemic, by = "CNTY_NAME") %>%
-  group_by(`TOWN_NAME`) %>% 
-  summarize(`IHD` = mean(`Crude.Rate`))
-
-# assign dose-response relationships / health impact functions
-## ischemic heart disease and PM2.5 - PLACEHOLDER, MADE UP
-dr_pm_ischemic <- 0.08 # 8% decrease in IHD mortality per 10 ug/m3 decrease in PM2.5
-
-## ischemic heart disease and O3
-## others
+```{r simulate movement of families, warning=FALSE}
+#load population-weighted centroids
 
 
-# list towns post-move by family moved (one row per family moved)
-moved_in_to <- rep(pop_town$TOWN_NAME, times = pop_town$`Moved In`)
-
-# combine towns pre-move by family and towns post-move by family to assign pre- and post- location to each family
-town_moved_pre_post <- data.frame(moved_out_from, moved_in_to) %>%
-## join pre-move exposure
-  rename(`TOWN_NAME` = `moved_out_from`) %>% 
-  left_join(pm_town, by = "TOWN_NAME") %>%
-  ## join pre-move incidence rates
-  left_join(ischemic_town, by = "TOWN_NAME") %>% 
-## join post-move exposure
-  select(`moved_out_from` = `TOWN_NAME`, `TOWN_NAME` = `moved_in_to`, `PM2.5 Pre` = `Average PM2.5 (ug/m3)`, `IHD Pre` = `IHD`) %>%
-  left_join(pm_town, by = "TOWN_NAME") %>%
-  select(`moved_out_from`, `moved_in_to` = `TOWN_NAME`, `PM2.5 Pre`, `PM2.5 Post` = `Average PM2.5 (ug/m3)`, `IHD Pre` = `IHD Pre`) %>% 
-## calculate change in exposure
-  mutate(`Change in PM2.5 (ug/m3)` = `PM2.5 Post` - `PM2.5 Pre`) %>% 
-  mutate(`% Change in IHD` = `Change in PM2.5 (ug/m3)`/10*dr_pm_ischemic) %>% 
-  mutate(`IHD Post` = `IHD Pre`*(1 +`% Change in IHD`)) %>% 
-  mutate(`IHD Post - Pre` = `IHD Post` - `IHD Pre`)
-
-# add total cases prevented - rate per 100,000 people, each family assumed to have 4 individuals 
-sum(town_moved_pre_post$`IHD Post - Pre`)/100000*4
-
-```
-
-# SIMULATION V2 - Trying IDW penalty
-
-```{r simulate movement with inverse distance weighting penalty}
 #find centroids for largest polygon per town
 centroids <- town_poly %>%
   st_centroid() %>% 
   group_by(TOWN_NAME) %>% 
   slice_max(order_by = SHAPE_Area)
 
-distances <- centroids %>% 
-  st_distance()
+#assign weights to each pair of towns equal to inverse distance squared
+  #list every town pair
+weights <- data.frame(moved_from = rep(centroids$TOWN_NAME, times = nrow(centroids))) %>% 
+  mutate(moved_to = rep(centroids$TOWN_NAME, times = rep(nrow(centroids), nrow(centroids)))) %>%
+  #create columns for pre- and post-move town centroids
+  mutate(centr_from = rep(centroids$geometry, times = nrow(centroids))) %>% 
+  mutate(centr_to = rep(centroids$geometry, times = rep(nrow(centroids), nrow(centroids)))) %>% 
+  #calculate distances between centroids
+  mutate(distance = st_distance(centr_from, centr_to, by_element = TRUE)) %>% 
+  mutate(distance = as.numeric(distance))
 
-# assign weights to each pair of towns equal to inverse distance squared
-weights <- data.frame(moved_from = rep(pop_town$TOWN_NAME, times = nrow(pop_town))) %>% 
-  mutate(moved_to = rep(pop_town$TOWN_NAME, times = rep(169,169))) %>%
-  mutate(geo_from = centroids$geometry[centroids$TOWN_NAME == weights$moved_from]) %>% 
-  mutate(geo_to = centroids$geometry[centroids$TOWN_NAME == weights$moved_to])
+dist_0 <- weights %>% 
+  filter(moved_from == moved_to) %>% 
+  select(moved_from, moved_to)
+
+for(i in 1:nrow(dist_0)) {
+  dist_0$replace[i] <- town_poly %>% 
+    group_by(TOWN_NAME) %>% 
+    slice_max(order_by = SHAPE_Area) %>% 
+    filter(TOWN_NAME == dist_0$moved_from[i]) %>% 
+    st_convex_hull() %>% 
+    st_cast("MULTIPOINT") %>%
+    st_cast("POINT") %>%
+    st_distance() %>%
+    #find max distance between any two points on town boundary and divide by two
+    max(na.rm = TRUE)/2
+}
+
+#select columns from low_income_pop to join with weights
+families_pre_town <- low_income_pop %>% 
+  select(moved_from = TOWN_NAME, total_at_or_below_ami) 
+dev_town <- low_income_pop %>% 
+  select(moved_to = `TOWN_NAME`, `Units Needed`)
+
+#set seed for reproducible samples  
+set.seed(99814)
+
+#old method
+weights0 <- weights %>%
+  left_join(families_pre_town, by = "moved_from") %>% 
+  left_join(dev_town, by = "moved_to") %>% 
+  left_join(dist_0, by = c("moved_from", "moved_to")) %>% 
+  #replace zero-length distances with replacements (half of max distance w/in town)
+  mutate(dist_new = if_else(distance == 0, replace, distance)) %>% 
+  #group by town pre-move
+  group_by(moved_from) %>% 
+  #round up units to integer
+  mutate(prop_units = `Units Needed`/sum(`Units Needed`)) %>%
+  #take inverse of distance squared
+  mutate(inv_sq = 1/dist_new^2) %>% 
+  #calculate crude penalty using families (pre-move town), proportion of new units (post-move town), and inverse distance squared (town pair)
+  mutate(penalty = prop_units*inv_sq) %>% 
+  mutate(lambda = total_at_or_below_ami*penalty/sum(penalty)) %>% 
+  ungroup() %>% 
+  mutate(pop_moved = rpois(nrow(.), lambda))
+
+#new method
+weights_pre <- weights %>%
+  left_join(families_pre_town, by = "moved_from") %>% 
+  left_join(dev_town, by = "moved_to") %>% 
+  left_join(dist_0, by = c("moved_from", "moved_to")) %>% 
+  #replace zero-length distances with replacements (half of max distance w/in town)
+  mutate(dist_new = if_else(distance == 0, replace, distance)) %>% 
+  #group by town pre-move
+  group_by(moved_from) %>% 
+  #round up units to integer
+  mutate(prop_units = `Units Needed`/sum(`Units Needed`)) %>%
+  #take inverse of distance squared
+  mutate(inv_sq = 1/dist_new^2) %>% 
+  #calculate crude penalty using families (pre-move town), proportion of new units (post-move town), and inverse distance squared (town pair)
+  mutate(penalty = prop_units*inv_sq) %>% 
+  mutate(lambda = penalty/sum(penalty)) %>% 
+  ungroup()
+
+#create new dataframe of weights for post-simulation population movement
+weights_post <- weights_pre %>% 
+  #arrange by starting town
+  arrange(moved_from) %>% 
+  #create column for population moved in each town pair
+  mutate(pop_moved = 0)
+
+#draw population moved from binomial distribution
+for(j in 0:168) {
+  weights_post$pop_moved[169*j+1] <- rbinom(1, size = weights_post$total_at_or_below_ami[169*j+1], prob = weights_post$lambda[169*j+1])
+  for(i in 2:169) {
+  weights_post$pop_moved[169*j+i] <- rbinom(1, size = weights_post$total_at_or_below_ami[169*j+i] - sum(weights_post$pop_moved[(169*j+1):169*j+i]), prob = weights_post$lambda[169*j+i])
+  }
+}
 
   
-  mutate(distance = st_distance(x = centroids$geometry[centroids$TOWN_NAME == weights$moved_from], y = centroids$geometry[centroids$TOWN_NAME == weights$moved_to], by_element = TRUE))
+#view table
+head(weights)
 
-#find distance between town centroids
+#check totals for consistency
+sum(weights$prop_units[weights$moved_from == "Ansonia"]) #should sum to 1
 
-gDistance(town_polygon, byid = TRUE)
+sum(weights_pre$lambda[weights$moved_from == "Ansonia"]) #should sum to pre-move pop in Ansonia
+weights$total_at_or_below_ami[weights$moved_from == "Ansonia"][1] #pre-move pop in Ansonia
 
-moved_out_from <- rep(pop_town$TOWN_NAME, times = pop_town$`Families Pre`)
+sum(weights$pop_moved[weights$moved_from == "Ansonia"]) #total families moved out of Ansonia, should be no more than pre-move pop
+
+sum(weights$pop_moved) #total families drawn to move or stay, should be no more than total families across all towns
+sum(weights$total_at_or_below_ami[weights$moved_to == "Ansonia"]) #should equal total families across all towns
+sum(low_income_pop$total_at_or_below_ami) #total families across all towns
 
 ```
 
+```{r summarize movement of families}
+#summarize families moved out by town
+moved_out <- weights %>% 
+  group_by(moved_from) %>% 
+  summarize(pop_pre = mean(total_at_or_below_ami), moved_out = sum(pop_moved)) %>% 
+  rename(TOWN_NAME = moved_from)
 
+#summarize families moved in by town
+moved_in <- weights %>% 
+  group_by(moved_to) %>% 
+  summarize(moved_in = sum(pop_moved)) %>% 
+  rename(TOWN_NAME = moved_to)
+
+#join moved_out and moved_in by town
+pop_town_moved <- moved_out %>% 
+  left_join(moved_in, by = "TOWN_NAME") %>% 
+  #subtract families moved out and add families moved in by town
+  mutate(pop_post = pop_pre + moved_in - moved_out)
+
+#join to town polygon
+towns_moved <- town_polygon %>% 
+  left_join(pop_town_moved, by = "TOWN_NAME")
+
+# check that total families moved in and moved out match
+sum(pop_town_moved$moved_out)
+sum(pop_town_moved$moved_in)
+
+# check that total families pre and post match - value should match low-income estimate
+sum(pop_town_moved$pop_pre)
+sum(pop_town_moved$pop_post)
+sum(low_income_pop$total_at_or_below_ami)
+```
+
+```{r map population by town pre and post move}
+# map families by town pre-move
+ggplot() + geom_sf(data = towns_moved, aes(fill = pop_pre)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
+
+# map families by town post-move
+ggplot() + geom_sf(data = towns_moved, aes(fill = pop_post)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
+
+# map families moving out or staying
+ggplot() + geom_sf(data = towns_moved, aes(fill = moved_out)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
+
+# map families moving in or staying
+ggplot() + geom_sf(data = towns_moved, aes(fill = moved_in)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
+```
+
+```{r estimate change in incidence}
+
+#assign dose-response relationships / health impact functions
+##all-cause mortality and PM2.5 - PLACEHOLDER, MADE UP
+dr_pm_allcause <- 0.0129 #1.29% increase in all-cause mortality per 1 ug/m3 increase in PM2.5
+
+##all-cause mortality and O3
+
+##all-cause mortality and NO2
+
+##all-cause mortality and temperature
+
+#estimate change in exposure and incidence
+post_sim <- weights %>% 
+  select(TOWN_NAME = moved_from, moved_to, pop_moved) %>% 
+  #join mean PM2.5 by town pre-move
+  left_join(pm_town[,1:2], by = "TOWN_NAME") %>% 
+  rename(pm_pre = pm_mean, moved_from = TOWN_NAME, TOWN_NAME = moved_to) %>% 
+  #join mean PM2.5 by town post-move
+  left_join(pm_town[,1:2], by = "TOWN_NAME") %>% 
+  rename(pm_post = pm_mean, moved_to = TOWN_NAME) %>% 
+  #calculate difference (post-pre) in PM2.5 exposure
+  mutate(pm_diff = pm_post - pm_pre) %>% 
+  #join baseline all-cause mortality rates (per 100,000, currently using statewide)
+  mutate(mr_pre = allcause$Crude.Rate[1]) %>% 
+  #join dose-response relationships / health impact functions (PM2.5 and all-cause mortality)
+  mutate(hif = dr_pm_allcause) %>% 
+  #calculate post-move mortality rates using health impact function
+  mutate(mr_post = mr_pre/(1 + dr_pm_allcause)^(pm_diff)) %>% 
+  #calculate absolute difference in mortality rates (post-pre)
+  mutate(mr_diff = mr_post - mr_pre) %>% 
+  #calculate deaths averted (each family assumed to have 4 individuals)
+  mutate(averted = -mr_diff*pop_moved/100000*4)
+  
+#sum total number of deaths averted
+sum(post_sim$averted)
+
+```
+
+\newpage
+
+**To-do/to-figure-out**
+* Send list of health endpoints and ideas for identifying stratified dose-response relationships
+  + Fill table shells with race/ethnicity-specific (and age-specific?) d-r coefficients
+* assign var name from tidycensus
+* Should we randomize family size? Or use average family size specific to each town?
+* Better way to aggregate tracts into towns (also need to check if 2019 tracts = 2010 tracts)?
+    + Best way to deal with tracts containing/contained in multiple townships? Specifically three tracts with 0 families, should I split into multiple observations so pollution estimate can be input into town average?
+    + could do daziemetric (?) mapping - reapportioning census data into buildings, can take volume of building - going to be conservative, dilutive effect
+    + for now, go with what I have, can circle back later
+* Mean vs median to average pollution exposure across census tracts when aggregating to towns?
+    + two options - can do aerial averaging - taking weighted avg by how much tract represents of each town - sf - st_intersection will give proportion that polygon comprises of another polygon
+    + can complicate more later
+    + find out what averaging EPA uses for FAQSD estimates - e.g. pop weighted or aerial avg
+* Identify/quantify all-cause mortality endpoints and dose-response relationships (refer to BenMAP)
+* Verify - we only need to simulate movement and calculate exposure/incidence changes for this specific population right? Since others not in this population are presumed to stay in place? Is it worth adding random movement of all CT residents?
+* Percent affordable based on total assisted units / total units - total assisted currently includes government assisted, tenant rental assistance, SF CHFA USDA mortgages, and deed restricted units - good definition?
+* Add inverse distance weighting penalty to movement simulation
+    + check demography lit to justify squaring distance and standardizing
+    + how to prevent drawing more families than estimate (pop_post is negative)
+* Crude vs. age-adjusted (or otherwise adjusted) incidence rates?
+* Where to get incidence rates specific to population?
+    + use state incidence rate instead
+* Simulate movement using total affordable units instead of units needed?
+    + no, keep using units needed (new housing will drive movement)
+* Start flow diagram/documentation of decision points
+* Edit all-cause mortality dataframe and edit code for estimating change in mortality
+* Should we use migration flows from Census data to estimate baseline probabilities of movement?
+    + characteristics available for 2011-2015 ACS flows: Age, Sex, Race, Hispanic origin
+    + would these be worth using instead of or in addition to inverse distance weighting?
+* Centroids
+    + use population weighted centroids
+    + use correct projection for calculating centroid distances
+* Deriving estimate of deaths averted
+    + how to use dose-response coefficient properly?? Use exposure difference as exponent or factor?
 

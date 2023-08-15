@@ -281,25 +281,6 @@ dev_town <- low_income_pop %>%
 #set seed for reproducible samples  
 set.seed(99814)
 
-#old method
-weights0 <- weights %>%
-  left_join(families_pre_town, by = "moved_from") %>% 
-  left_join(dev_town, by = "moved_to") %>% 
-  left_join(dist_0, by = c("moved_from", "moved_to")) %>% 
-  #replace zero-length distances with replacements (half of max distance w/in town)
-  mutate(dist_new = if_else(distance == 0, replace, distance)) %>% 
-  #group by town pre-move
-  group_by(moved_from) %>% 
-  #round up units to integer
-  mutate(prop_units = `Units Needed`/sum(`Units Needed`)) %>%
-  #take inverse of distance squared
-  mutate(inv_sq = 1/dist_new^2) %>% 
-  #calculate crude penalty using families (pre-move town), proportion of new units (post-move town), and inverse distance squared (town pair)
-  mutate(penalty = prop_units*inv_sq) %>% 
-  mutate(lambda = total_at_or_below_ami*penalty/sum(penalty)) %>% 
-  ungroup() %>% 
-  mutate(pop_moved = rpois(nrow(.), lambda))
-
 #new method
 weights_pre <- weights %>%
   left_join(families_pre_town, by = "moved_from") %>% 
@@ -315,51 +296,51 @@ weights_pre <- weights %>%
   mutate(inv_sq = 1/dist_new^2) %>% 
   #calculate crude penalty using families (pre-move town), proportion of new units (post-move town), and inverse distance squared (town pair)
   mutate(penalty = prop_units*inv_sq) %>% 
+  #turn penalty into weighted probability that sums to 1 for any given starting town
   mutate(lambda = penalty/sum(penalty)) %>% 
   ungroup()
 
-#create new dataframe of weights for post-simulation population movement
+#create new data frame of weights for post-simulation population movement
 weights_post <- weights_pre %>% 
   #arrange by starting town
   arrange(moved_from) %>% 
   #create column for population moved in each town pair
   mutate(pop_moved = 0)
 
+
 #draw population moved from binomial distribution
 for(j in 0:168) {
   weights_post$pop_moved[169*j+1] <- rbinom(1, size = weights_post$total_at_or_below_ami[169*j+1], prob = weights_post$lambda[169*j+1])
   for(i in 2:169) {
-  weights_post$pop_moved[169*j+i] <- rbinom(1, size = weights_post$total_at_or_below_ami[169*j+i] - sum(weights_post$pop_moved[(169*j+1):169*j+i]), prob = weights_post$lambda[169*j+i])
+  weights_post$pop_moved[169*j+i] <- rbinom(1, size = weights_post$total_at_or_below_ami[169*j+i] - sum(weights_post$pop_moved[(169*j+1):(169*j+i)]), prob = weights_post$lambda[169*j+i])
   }
 }
 
-  
 #view table
-head(weights)
+head(weights_post)
 
 #check totals for consistency
-sum(weights$prop_units[weights$moved_from == "Ansonia"]) #should sum to 1
+sum(weights_post$prop_units[weights_post$moved_from == "Waterbury"]) #should sum to 1
+sum(weights_post$lambda[weights_post$moved_from == "Branford"]) #should sum to 1
 
-sum(weights_pre$lambda[weights$moved_from == "Ansonia"]) #should sum to pre-move pop in Ansonia
-weights$total_at_or_below_ami[weights$moved_from == "Ansonia"][1] #pre-move pop in Ansonia
+weights_post$total_at_or_below_ami[weights_post$moved_from == "New Haven"][1] #pre-move pop in given town
+sum(weights_post$pop_moved[weights_post$moved_from == "New Haven"]) #total families moved out of given town, should be no more than pre-move pop
 
-sum(weights$pop_moved[weights$moved_from == "Ansonia"]) #total families moved out of Ansonia, should be no more than pre-move pop
-
-sum(weights$pop_moved) #total families drawn to move or stay, should be no more than total families across all towns
-sum(weights$total_at_or_below_ami[weights$moved_to == "Ansonia"]) #should equal total families across all towns
+sum(weights_post$pop_moved) #total families drawn to move or stay, should be no more than total families across all towns
+sum(weights_post$total_at_or_below_ami[weights_post$moved_to == "Canaan"]) #should equal total families across all towns
 sum(low_income_pop$total_at_or_below_ami) #total families across all towns
 
 ```
 
 ```{r summarize movement of families}
 #summarize families moved out by town
-moved_out <- weights %>% 
+moved_out <- weights_post %>% 
   group_by(moved_from) %>% 
   summarize(pop_pre = mean(total_at_or_below_ami), moved_out = sum(pop_moved)) %>% 
   rename(TOWN_NAME = moved_from)
 
 #summarize families moved in by town
-moved_in <- weights %>% 
+moved_in <- weights_post %>% 
   group_by(moved_to) %>% 
   summarize(moved_in = sum(pop_moved)) %>% 
   rename(TOWN_NAME = moved_to)
@@ -374,11 +355,11 @@ pop_town_moved <- moved_out %>%
 towns_moved <- town_polygon %>% 
   left_join(pop_town_moved, by = "TOWN_NAME")
 
-# check that total families moved in and moved out match
+# check that total families moved in and moved out match and do not exceed total population estimate
 sum(pop_town_moved$moved_out)
 sum(pop_town_moved$moved_in)
 
-# check that total families pre and post match - value should match low-income estimate
+# check that total families pre and post match total population estimate
 sum(pop_town_moved$pop_pre)
 sum(pop_town_moved$pop_post)
 sum(low_income_pop$total_at_or_below_ami)
@@ -415,7 +396,7 @@ dr_pm_allcause <- 0.0129 #1.29% increase in all-cause mortality per 1 ug/m3 incr
 ##all-cause mortality and temperature
 
 #estimate change in exposure and incidence
-post_sim <- weights %>% 
+post_sim <- weights_post %>% 
   select(TOWN_NAME = moved_from, moved_to, pop_moved) %>% 
   #join mean PM2.5 by town pre-move
   left_join(pm_town[,1:2], by = "TOWN_NAME") %>% 
@@ -438,7 +419,6 @@ post_sim <- weights %>%
   
 #sum total number of deaths averted
 sum(post_sim$averted)
-
 ```
 
 \newpage

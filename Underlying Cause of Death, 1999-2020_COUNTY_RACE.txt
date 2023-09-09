@@ -1,0 +1,100 @@
+"Notes"	"County"	"County Code"	"Race"	"Race Code"	Deaths	Population	Crude Rate	Crude Rate Lower 95% Confidence Interval	Crude Rate Upper 95% Confidence Interval	Crude Rate Standard Error	Age Adjusted Rate
+	"Fairfield County, CT"	"09001"	"American Indian or Alaska Native"	"1002-5"	Suppressed	5810	Suppressed	Suppressed	Suppressed	Suppressed	Suppressed
+	"Fairfield County, CT"	"09001"	"Asian or Pacific Islander"	"A-PI"	116	58867	197.054	161.194	232.915	18.296	269.927
+	"Fairfield County, CT"	"09001"	"Black or African American"	"2054-5"	684	129086	529.879	490.169	569.590	20.260	597.149
+	"Fairfield County, CT"	"09001"	"White"	"2106-3"	6044	749569	806.330	786.001	826.659	10.372	548.285
+	"Hartford County, CT"	"09003"	"American Indian or Alaska Native"	"1002-5"	Suppressed	6027	Suppressed	Suppressed	Suppressed	Suppressed	Suppressed
+	"Hartford County, CT"	"09003"	"Asian or Pacific Islander"	"A-PI"	111	57203	194.046	157.946	230.145	18.418	310.888
+	"Hartford County, CT"	"09003"	"Black or African American"	"2054-5"	900	149165	603.359	563.939	642.778	20.112	695.838
+	"Hartford County, CT"	"09003"	"White"	"2106-3"	7318	679325	1077.246	1052.564	1101.927	12.593	696.582
+	"Litchfield County, CT"	"09005"	"American Indian or Alaska Native"	"1002-5"	Suppressed	775	Suppressed	Suppressed	Suppressed	Suppressed	Suppressed
+	"Litchfield County, CT"	"09005"	"Asian or Pacific Islander"	"A-PI"	Suppressed	4414	Suppressed	Suppressed	Suppressed	Suppressed	Suppressed
+	"Litchfield County, CT"	"09005"	"Black or African American"	"2054-5"	34	5106	665.883	461.144	930.505	114.198	803.936
+	"Litchfield County, CT"	"09005"	"White"	"2106-3"	1866	170038	1097.402	1047.609	1147.194	25.404	696.315
+	"Middlesex County, CT"	"09007"	"American Indian or Alaska Native"	"1002-5"	0	567	Unreliable	0.000	0.000	0.000	Unreliable
+	"Middlesex County, CT"	"09007"	"Asian or Pacific Islander"	"A-PI"	11	5921	Unreliable	92.741	332.411	56.015	Unreliable
+	"Middlesex County, CT"	"09007"	"Black or African American"	"2054-5"	66	10011	659.275	509.883	838.762	81.151	812.890
+	"Middlesex County, CT"	"09007"	"White"	"2106-3"	1541	145937	1055.935	1003.213	1108.657	26.899	624.889
+	"New Haven County, CT"	"09009"	"American Indian or Alaska Native"	"1002-5"	Suppressed	5643	Suppressed	Suppressed	Suppressed	Suppressed	Suppressed
+	"New Haven County, CT"	"09009"	"Asian or Pacific Islander"	"A-PI"	76	39578	192.026	151.295	240.349	22.027	272.525
+	"New Haven County, CT"	"09009"	"Black or African American"	"2054-5"	898	138658	647.637	605.277	689.996	21.612	778.409
+	"New Haven County, CT"	"09009"	"White"	"2106-3"	7128	670878	1062.488	1037.822	1087.154	12.585	688.375
+	"New London County, CT"	"09011"	"American Indian or Alaska Native"	"1002-5"	11	3820	Unreliable	143.749	515.238	86.823	Unreliable
+	"New London County, CT"	"09011"	"Asian or Pacific Islander"	"A-PI"	32	12801	249.980	170.987	352.897	44.191	274.210
+	"New London County, CT"	"09011"	"Black or African American"	"2054-5"	102	22194	459.584	370.393	548.775	45.506	689.372
+	"New London County, CT"	"09011"	"White"	"2106-3"	2479	226391	1095.008	1051.902	1138.114	21.993	739.825
+	"Tolland County, CT"	"09013"	"American Indian or Alaska Native"	"1002-5"	Suppressed	511	Suppressed	Suppressed	Suppressed	Suppressed	Suppressed
+	"Tolland County, CT"	"09013"	"Asian or Pacific Islander"	"A-PI"	12	8280	Unreliable	74.886	253.159	41.837	Unreliable
+	"Tolland County, CT"	"09013"	"Black or African American"	"2054-5"	24	6686	358.959	229.992	534.102	73.272	640.649
+	"Tolland County, CT"	"09013"	"White"	"2106-3"	1110	135244	820.739	772.455	869.022	24.634	625.702
+	"Windham County, CT"	"09015"	"American Indian or Alaska Native"	"1002-5"	Suppressed	1108	Suppressed	Suppressed	Suppressed	Suppressed	Suppressed
+	"Windham County, CT"	"09015"	"Asian or Pacific Islander"	"A-PI"	Suppressed	2119	Suppressed	Suppressed	Suppressed	Suppressed	Suppressed
+	"Windham County, CT"	"09015"	"Black or African American"	"2054-5"	17	4533	Unreliable	218.469	600.457	90.958	Unreliable
+	"Windham County, CT"	"09015"	"White"	"2106-3"	1127	109022	1033.736	973.383	1094.090	30.793	784.336
+"---"
+"Dataset: Underlying Cause of Death, 1999-2020"
+"Query Parameters:"
+"States: Connecticut (09)"
+"Year/Month: 2019"
+"Group By: County; Race"
+"Show Totals: Disabled"
+"Show Zero Values: True"
+"Show Suppressed: True"
+"Standard Population: 2000 U.S. Std. Population"
+"Calculate Rates Per: 100,000"
+"Rate Options: Default intercensal populations for years 2001-2009 (except Infant Age Groups)"
+"---"
+"Help: See http://wonder.cdc.gov/wonder/help/ucd.html for more information."
+"---"
+"Query Date: Sep 7, 2023 1:02:41 PM"
+"---"
+"Suggested Citation: Centers for Disease Control and Prevention, National Center for Health Statistics. National Vital Statistics"
+"System, Mortality 1999-2020 on CDC WONDER Online Database, released in 2021. Data are from the Multiple Cause of Death Files,"
+"1999-2020, as compiled from data provided by the 57 vital statistics jurisdictions through the Vital Statistics Cooperative"
+"Program. Accessed at http://wonder.cdc.gov/ucd-icd10.html on Sep 7, 2023 1:02:41 PM"
+"---"
+Messages:
+"1. Totals are not available for these results due to suppression constraints. More Information:"
+"http://wonder.cdc.gov/wonder/help/faq.html#Privacy."
+"---"
+Caveats:
+"1. Data are Suppressed when the data meet the criteria for confidentiality constraints. More information:"
+"http://wonder.cdc.gov/wonder/help/ucd.html#Assurance of Confidentiality."
+"2. Death rates are flagged as Unreliable when the rate is calculated with a numerator of 20 or less. More information:"
+"http://wonder.cdc.gov/wonder/help/ucd.html#Unreliable."
+"3. The populations used to calculate standard age-adjusted rates are documented here: More information:"
+"http://wonder.cdc.gov/wonder/help/ucd.html#2000 Standard Population."
+"4. The method used to calculate age-adjusted rates is documented here: More information:"
+"http://wonder.cdc.gov/wonder/help/ucd.html#Age-Adjusted Rates."
+"5. Deaths for persons of unknown age are included in counts and crude rates, but are not included in age-adjusted rates."
+"6. Information included on the death certificate about the race and Hispanic ethnicity of the decedent is reported by the"
+"funeral director as provided by an informant, often the surviving next of kin, or, in the absence of an informant, on the basis"
+"of observation. Race and ethnicity information from the census is by self-report. To the extent that race and Hispanic origin"
+"are inconsistent between these two data sources, death rates will be biased. More information:"
+"http://wonder.cdc.gov/wonder/help/ucd.html#Racial Differences."
+"7. The method used to calculate 95% confidence intervals is documented here: More information:"
+"http://wonder.cdc.gov/wonder/help/ucd.html#Confidence-Intervals."
+"8. The method used to calculate standard errors is documented here: More information:"
+"http://wonder.cdc.gov/wonder/help/ucd.html#Standard-Errors."
+"9. The population figures for year 2020 are bridged-race estimates of the July 1 resident population, from the Vintage 2020"
+"postcensal series released by NCHS on September 22, 2021. The population figures for year 2019 are bridged-race estimates of the"
+"July 1 resident population, from the Vintage 2019 postcensal series released by NCHS on July 9, 2020. The population figures for"
+"year 2018 are bridged-race estimates of the July 1 resident population, from the Vintage 2018 postcensal series released by NCHS"
+"on June 25, 2019. The population figures for year 2017 are bridged-race estimates of the July 1 resident population, from the"
+"Vintage 2017 postcensal series released by NCHS on June 27, 2018. The population figures for year 2016 are bridged-race"
+"estimates of the July 1 resident population, from the Vintage 2016 postcensal series released by NCHS on June 26, 2017. The"
+"population figures for year 2015 are bridged-race estimates of the July 1 resident population, from the Vintage 2015 postcensal"
+"series released by NCHS on June 28, 2016. The population figures for year 2014 are bridged-race estimates of the July 1 resident"
+"population, from the Vintage 2014 postcensal series released by NCHS on June 30, 2015. The population figures for year 2013 are"
+"bridged-race estimates of the July 1 resident population, from the Vintage 2013 postcensal series released by NCHS on June 26,"
+"2014. The population figures for year 2012 are bridged-race estimates of the July 1 resident population, from the Vintage 2012"
+"postcensal series released by NCHS on June 13, 2013. The population figures for year 2011 are bridged-race estimates of the July"
+"1 resident population, from the Vintage 2011 postcensal series released by NCHS on July 18, 2012. Population figures for 2010"
+"are April 1 Census counts. The population figures for years 2001 - 2009 are bridged-race estimates of the July 1 resident"
+"population, from the revised intercensal county-level 2000 - 2009 series released by NCHS on October 26, 2012. Population"
+"figures for 2000 are April 1 Census counts. Population figures for 1999 are from the 1990-1999 intercensal series of July 1"
+"estimates. Population figures for the infant age groups are the number of live births. <br/><b>Note:</b> Rates and population"
+"figures for years 2001 - 2009 differ slightly from previously published reports, due to use of the population estimates which"
+"were available at the time of release."
+"10. The population figures used in the calculation of death rates for the age group 'under 1 year' are the estimates of the"
+"resident population that is under one year of age. More information: http://wonder.cdc.gov/wonder/help/ucd.html#Age Group."

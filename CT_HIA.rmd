@@ -1,5 +1,6 @@
 ---
 title: "Health Impact Assessment of Affordable Housing Development in Connecticut"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
 output:
   html_document:
     df_print: paged
@@ -11,11 +12,39 @@ library(sf)
 library(here)
 library(readxl)
 library(ncdf4)
-#library(raster)
+library(raster)
 #library(rgeos)
 #library(rgdal)
 library(tidycensus)
 library(daymetr)
+library(tidyr)
+```
+
+```{r load shapefiles for CT census tracts}
+options(tigris_use_cache = TRUE)
+
+# list of 5-year ACS variables for reference
+vars_acs <- load_variables(year = 2019, dataset = "acs5", cache = TRUE)
+# list of decennial Census variables for reference
+vars_dec <- load_variables(year = 2020, dataset = "pl", cache = TRUE)
+
+# get CT census tract polygon using variable for families in poverty
+ct_tracts <- get_acs(state = "CT", geography = "tract", variables = "B17013_002", geometry = TRUE, year = 2019)
+
+# get crs from census tract polygon
+crs <- st_crs(ct_tracts)
+```
+
+```{r load shapefiles for CT townships}
+# read CT town lines
+town_lines <- st_read("CT Town Lines/Town_Lines.shp")
+
+# read CT town polygon
+town_poly <- st_read("CT Vicinity Town Polygon/CT_Vicinity_Town_Polygon.shp") %>%
+  filter(STATE_COD == "CT", is.na(TOWN_NAME) == FALSE) %>% 
+  group_by(TOWN_NAME) %>%
+  # keep only largest polygon per town (exclude small coastal islands)
+  slice_max(order_by = SHAPE_Area)
 ```
 
 ```{r load pollutant datasets}
@@ -37,8 +66,33 @@ o3_tract <- read.delim(gzfile("2019_ozone_daily_8hour_maximum.txt.gz"), sep = ",
 ## format FIPS to match GEOID format used by tidycensus get_acs
   mutate(GEOID = str_pad(FIPS, 11, side = "left", pad = "0"))
 
+# read in NO2 data
 no2 <- nc_open("SurfaceNO2_0.0083deg_2019.nc")
 
+no2_lon <- ncvar_get(no2, "lon")
+no2_lat <- ncvar_get(no2, "lat")
+no2_surface <- ncvar_get(no2, "SurfaceNO2")
+fillvalue <- ncatt_get(no2, "SurfaceNO2", "_FillValue")
+
+nc_close(no2)
+
+no2_surface[no2_surface == fillvalue$value] <- NA
+no2_r <- raster(t(no2_surface), xmn = min(no2_lon), xmx = max(no2_lon), ymn = min(no2_lat), ymx = max(no2_lat), crs = crs) %>% 
+  raster::flip(direction = 'y')
+
+# extract raster values and join to town polygons
+no2_vals <- extract(no2_r, town_poly, fun = mean, na.rm = TRUE, sp = T)
+no2_town_sf <- st_as_sf(no2_vals)
+
+# read in temperature data
+```
+
+```{r join pollutant data to shapefile}
+ct_tracts <- ct_tracts %>% 
+## join PM2.5 data
+  left_join(., pm_tract, by = "GEOID") %>% 
+## join ozone data
+  left_join(., o3_tract, by = "GEOID")
 ```
 
 ```{r load affordable housing dataset}
@@ -54,76 +108,112 @@ housing_town <- read.csv("Affordable_Housing_by_Town_2011-2022.csv") %>%
 housing_town$`Units Needed`[housing_town$`At least 10%` == "Yes"] = 0
 ```
 
-```{r load incidence datasets}
+```{r load all-cause mortality incidence rates}
 # read county-level all-cause mortality rates from CDC WONDER
 allcause <- read.delim("Underlying Cause of Death, 2018-2021, Single Race_STATE.txt", sep = "\t")[1:2,-1]
+
+allcause_race <- read.delim("Underlying Cause of Death, 1999-2020_RACE.txt", sep = "\t")[1:5,-1]
+
+allcause_race_county <- read.delim("Underlying Cause of Death, 1999-2020_COUNTY_RACE.txt", sep = "\t")[1:33, -1]
+
+allcause_race_county_ethn <- read.delim("Underlying Cause of Death, 1999-2020_COUNTY_RACE_ETHNICITY.txt", sep = "\t")[1:96, -1]
 ```
 
-```{r get list of ACS variables}
-# list of 5-year ACS variables for reference
-vars <- load_variables(year = 2019, dataset = "acs5", cache = TRUE)
-```
+```{r load population data and clean population variables}
+# list ACS variables with income brackets by race/ethnicity
+incomes_vars <- c("B19001A", "B19001B", "B19001C", "B19001D", "B19001E", "B19001F", "B19001G", "B19001H", "B19001I")
 
-```{r load shapefiles and population data for CT census tracts}
-options(tigris_use_cache = TRUE)
+race_eth <- c("white", "black", "ai_an", "asian", "nh_pi", "other_race", "multiracial", "white_nh", "hispanic")
 
-# get CT census tract polygon using variable for families in poverty
-ct_tracts <- get_acs(state = "CT", geography = "tract", variables = "B17013_002", geometry = TRUE, year = 2019) %>% 
-## join PM2.5 data
-  left_join(., pm_tract, by = "GEOID") %>% 
-## join ozone data
-  left_join(., o3_tract, by = "GEOID")
+# merge maximum incomes for each bracket with variable suffixes 
+variable <- c("002", "003", "004", "005", "006", "007", "008", "009", "010", "011", "012", "013", "014", "015", "016", "017")
 
-# get estimates of households in each income bracket by town
-township_incomes <- get_acs(geography = "county subdivision", state = "CT", table = "B19001", year = 2019, output = "tidy")
+max_income <- c(9999, 14999, 19999, 24999, 29999, 34999, 39999, 44999, 49999, 59999, 74999, 99999, 124999, 149999, 199999, 200000)
+
+income_brackets <- data.frame(variable, max_income)
+
+# get population by race in each town
+race <- get_decennial(geography = "county subdivision", state = "CT", table = "P1", year = 2020, output = "tidy")
+# get population by Hispanic or Latino ethnicity by race in each town
+eth_by_race <- get_decennial(geography = "county subdivision", state = "CT", table = "P2", year = 2020, output = "tidy") %>% 
+  pivot_wider(names_from = variable, values_from = value) %>% 
+  mutate(black_nh_pct = P2_006N/P2_003N) %>% 
+  mutate(ai_an_nh_pct = P2_007N/P2_003N) %>% 
+  mutate(asian_nh_pct = P2_008N/P2_003N) %>% 
+  mutate(nh_pi_nh_pct = P2_009N/P2_003N) %>%
+  mutate(other_race_nh_pct = P2_010N/P2_003N) %>% 
+  mutate(multiracial_nh_pct = P2_011N/P2_003N) %>% 
+  dplyr::select(TOWN_NAME = NAME, black_nh_pct:multiracial_nh_pct)
 
 # pull low-income limits by town
 AMI_limits <- read_excel(here("Section8-FY19.xlsx")) %>% 
   filter(state_name == "Connecticut") %>% 
-  select(GEOID = fips2010, TOWN_NAME = county_town_name, limit = l80_4)
-
-# merge township data
-township_data <- left_join(AMI_limits, township_incomes, by = "GEOID") %>% 
+  dplyr::select(GEOID = fips2010, TOWN_NAME = county_town_name, limit = l80_4) %>% 
   # clean town name
   mutate(TOWN_NAME = str_sub(TOWN_NAME, 1, nchar(TOWN_NAME) - 5))
 
-# merge maximum incomes for each bracket with township data 
-variable <- c("B19001_002", "B19001_003", "B19001_004", "B19001_005", "B19001_006", "B19001_007", "B19001_008", "B19001_009", "B19001_010", "B19001_011", "B19001_012", "B19001_013", "B19001_014", "B19001_015", "B19001_016", "B19001_017")
-max_income <- c(9999, 14999, 19999, 24999, 29999, 34999, 39999, 44999, 49999, 59999, 74999, 99999, 124999, 149999, 199999, 200000)
-income_brackets <- data.frame(variable, max_income)
-low_income <- left_join(income_brackets, township_data, by = "variable")
+# get households in each income bracket by town for each race/ethnicity group (wide table format)
+incomes_race <- map(incomes_vars, ~get_acs(geography = "county subdivision", state = "CT", table = .x, year = 2019, output = "tidy")) %>% 
+  data.frame() %>%
+  dplyr::select(GEOID, TOWN_NAME = NAME, variable, estimate, estimate.1, estimate.2, estimate.3, estimate.4, estimate.5, estimate.6, estimate.7, estimate.8) %>% 
+  rename(white = estimate, black = estimate.1, ai_an = estimate.2, asian = estimate.3, nh_pi = estimate.4, other_race = estimate.5, multiracial = estimate.6, white_nh = estimate.7, hispanic = estimate.8) %>% 
+  mutate(nonhispanic = rowSums(across(c(white, black, ai_an, asian, nh_pi, other_race, multiracial))) - hispanic) %>% 
+  ## estimate ethnoracial-specific population using race by ethnicity per town
+  left_join(eth_by_race, by = "TOWN_NAME") %>% 
+  mutate(white_h = white - white_nh) %>%
+  mutate(black_nh = hispanic*black_nh_pct) %>% 
+  mutate(black_h = black - black_nh) %>% 
+  mutate(ai_an_nh = hispanic*ai_an_nh_pct) %>% 
+  mutate(ai_an_h = ai_an - ai_an_nh) %>% 
+  mutate(asian_nh = hispanic*asian_nh_pct) %>% 
+  mutate(asian_h = asian - asian_nh) %>% 
+  mutate(other_race_nh = hispanic*other_race_nh_pct) %>% 
+  mutate(other_race_h = other_race - other_race_nh) %>% 
+  mutate(multiracial_nh = hispanic*multiracial_nh_pct) %>% 
+  mutate(multiracial_h = multiracial - multiracial_nh) %>% 
+  filter(!str_detect(TOWN_NAME, "County subdivisions not defined")) %>% 
+  mutate(TOWN_NAME = sub(" town.*", "", TOWN_NAME)) %>% 
+  mutate(variable = sub(".*_", "", variable))
 
-# sum to find total low-income households (at or below 80% AMI)
-low_income_pop <- low_income %>% 
-  mutate(below_ami = case_when(max_income <= limit ~ estimate, max_income > limit ~ 0)) %>% 
-  group_by(TOWN_NAME) %>% 
-  summarize(total_at_or_below_ami = sum(below_ami)) %>% 
-  # join housing by town
-  left_join(housing_town, by = "TOWN_NAME") %>% 
-  select(TOWN_NAME, total_at_or_below_ami, `Units Needed`)
+# merge township data
+low_income <- incomes_race %>% 
+  left_join(AMI_limits, by = c("GEOID", "TOWN_NAME")) %>% 
+  # inner join to filter out "001" variable (total)
+  inner_join(income_brackets, by = "variable") %>% 
+  # make table long
+  pivot_longer(cols = white:hispanic, names_to = "race_ethnicity")
+
+head(low_income)
+
+low_income_pop <- low_income %>%
+  # replace estimates above income limit with 0
+  mutate(value_li = case_when(max_income <= limit ~ value, max_income > limit ~ 0)) %>% 
+  group_by(TOWN_NAME, race_ethnicity) %>% 
+  # sum total low-income households in each race/ethnicity variable by town
+  summarize(pop_pre = sum(value_li)) %>% 
+  dplyr::select(TOWN_NAME, race_ethnicity, pop_pre)
+
+head(low_income_pop)
 ```
 
-```{r load shapefiles for CT townships}
-# read CT town lines
-town_lines <- st_read("CT Town Lines/Town_Lines.shp")
-
-# read CT town polygon
-town_poly <- st_read("CT Vicinity Town Polygon/CT_Vicinity_Town_Polygon.shp") %>%
-  filter(STATE_COD == "CT", is.na(TOWN_NAME) == FALSE) 
-
+```{r join housing and population data to town shapefile}
 town_polygon <- town_poly %>% 
   # join housing data by town - using inner join to exclude area of Long Island Sound
-  inner_join(housing_town, by = "TOWN_NAME") %>% 
-  #join population with low income by town
-  left_join(low_income_pop, by = "TOWN_NAME")
+  inner_join(housing_town, by = "TOWN_NAME")
+
+# join population with low income for each race/ethnicity by town
+town_polygon_list <- map(race_eth, ~ left_join(town_polygon, filter(low_income_pop, race_ethnicity == .x), by = "TOWN_NAME"))
+
+# bind shapefiles by race/ethnicity
+town_polygon_sf <- bind_rows(town_polygon_list[[1]], town_polygon_list[[2]], town_polygon_list[[3]], town_polygon_list[[4]], town_polygon_list[[5]], town_polygon_list[[6]], town_polygon_list[[7]], town_polygon_list[[8]], town_polygon_list[[9]])
 ```
 
-```{r aggregate tract-level exposures by township}
+```{r average tract-level PM2.5 and ozone by township}
 # using spreadsheet from 2010 census tract to town conversion tool from CT Data Collaborative: https://tract2town.ctdata.org/
 tract_town <- read.csv("Census_Tracts_with_Town_Names__2010_.csv") %>% 
 ## join families by tract to towns by tract
   mutate(GEOID = str_pad(GEOID, 11, side = "left", pad = "0")) %>% 
-  select(GEOID, TOWN_NAME = Town) %>% 
+  dplyr::select(GEOID, TOWN_NAME = Town) %>% 
 ## clean rows - delete undefined township, for now keeping rows with no exposure data (East Lyme, Wolcott)
   filter(TOWN_NAME != "County subdivisions not defined")
 
@@ -152,59 +242,85 @@ o3_town <- tract_town %>%
   group_by(`TOWN_NAME`) %>% 
   summarize(o3_mean = mean(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE), `Standard Deviation (ppb)` = sd(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE), `Min O3` = min(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE), `Max O3` = max(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE), `IQR (ppb)` = IQR(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE)) 
 
+# summarize mean NO2 gridded estimates by town (largest polygon)
+no2_town <- no2_town_sf %>%
+  group_by(TOWN_NAME) %>% 
+  slice_max(order_by = SHAPE_Area) %>% 
+  summarize(no2_mean = layer) %>% 
+  dplyr::select(TOWN_NAME, no2_mean)
+
 # join to town polygon
-pm_town_sf <- town_polygon %>% 
+pm_town_sf <- town_poly %>% 
   left_join(pm_town, by = "TOWN_NAME")
 
-o3_town_sf <- town_polygon %>% 
+o3_town_sf <- town_poly %>% 
   left_join(o3_town, by = "TOWN_NAME")
 ```
 
-```{r map exposure contrast within townships}
+```{r map tract-level PM2.5 and ozone exposure contrast within townships}
 # map PM2.5 standard deviation by town
 ggplot() + geom_sf(data = pm_town_sf, aes(fill = `Standard Deviation (ug/m3)`)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1)
+
+# map PM2.5 IQR by town
+ggplot() + geom_sf(data = pm_town_sf, aes(fill = `IQR (ug/m3)`)) + 
   scale_fill_viridis_c(option = "magma", direction = -1)
 
 # map ozone standard deviation by town
 ggplot() + geom_sf(data = o3_town_sf, aes(fill = `Standard Deviation (ppb)`)) + 
   scale_fill_viridis_c(option = "magma", direction = -1)
 
-# map PM2.5 standard error by census tract with town lines
-ggplot() + geom_sf(data = ct_tracts, aes(fill = pm25_daily_average_stderr.ug.m3.)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
-
-# map ozone standard error by census tract with town lines
-ggplot() + geom_sf(data = ct_tracts, aes(fill = ozone_daily_8hour_maximum_stderr.ppb.)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
-
-# map PM2.5 standard deviation by town
-ggplot() + geom_sf(data = pm_town_sf, aes(fill = `IQR (ug/m3)`)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1)
-
-# map ozone standard deviation by town
+# map ozone IQR by town
 ggplot() + geom_sf(data = o3_town_sf, aes(fill = `IQR (ppb)`)) + 
   scale_fill_viridis_c(option = "magma", direction = -1)
 ```
 
-```{r map baseline pollution by census tract}
-# map PM2.5 by census tract without town lines
-ggplot() + geom_sf(data = ct_tracts, aes(fill = pm25_daily_average.ug.m3.)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1)
-
+```{r map tract-level baseline PM2.5 and ozone}
 # map PM2.5 by census tract with town lines
 ggplot() + geom_sf(data = ct_tracts, aes(fill = pm25_daily_average.ug.m3.)) + 
   scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
 
-# map O3 by census tract without town lines
-ggplot() + geom_sf(data = ct_tracts, aes(fill = ozone_daily_8hour_maximum.ppb.)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1)
-
 # map O3 by census tract with town lines
 ggplot() + geom_sf(data = ct_tracts, aes(fill = ozone_daily_8hour_maximum.ppb.)) + 
   scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
+```
 
-# map temperature by census tract
+```{r map baseline pollution by township}
+# map PM2.5 by town
+ggplot() + geom_sf(data = pm_town_sf, aes(fill = pm_mean)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1)
 
+#map ozone by town
+ggplot() + geom_sf(data = o3_town_sf, aes(fill = o3_mean)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1)
+
+#map NO2 by town
+ggplot() + geom_sf(data = no2_town_sf, aes(fill = layer)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1)
+
+#map heat index by town
+
+```
+
+```{r map baseline population by township}
+# map low-income population by census tract - White race
+ggplot() + geom_sf(data = town_polygon_sf[town_polygon_sf$race_ethnicity == "white",], aes(fill = pop_pre)) + scale_fill_viridis_c(option = "magma", direction = -1)
+# map low-income population by census tract - Black race
+ggplot() + geom_sf(data = town_polygon_sf[town_polygon_sf$race_ethnicity == "black",], aes(fill = pop_pre)) + scale_fill_viridis_c(option = "magma", direction = -1)
+# map low-income population by census tract - AI/AN race
+ggplot() + geom_sf(data = town_polygon_sf[town_polygon_sf$race_ethnicity == "ai_an",], aes(fill = pop_pre)) + scale_fill_viridis_c(option = "magma", direction = -1)
+# map low-income population by census tract - Asian race
+ggplot() + geom_sf(data = town_polygon_sf[town_polygon_sf$race_ethnicity == "asian",], aes(fill = pop_pre)) + scale_fill_viridis_c(option = "magma", direction = -1)
+# map low-income population by census tract - Native Hawaiian/Other Pacific Islander race
+ggplot() + geom_sf(data = town_polygon_sf[town_polygon_sf$race_ethnicity == "nh_pi",], aes(fill = pop_pre)) + scale_fill_viridis_c(option = "magma", direction = -1)
+# map low-income population by census tract - Some Other Race
+ggplot() + geom_sf(data = town_polygon_sf[town_polygon_sf$race_ethnicity == "other_race",], aes(fill = pop_pre)) + scale_fill_viridis_c(option = "magma", direction = -1)
+# map low-income population by census tract - Multiracial
+ggplot() + geom_sf(data = town_polygon_sf[town_polygon_sf$race_ethnicity == "multiracial",], aes(fill = pop_pre)) + scale_fill_viridis_c(option = "magma", direction = -1)
+# map low-income population by census tract - Non-Hispanic White race
+ggplot() + geom_sf(data = town_polygon_sf[town_polygon_sf$race_ethnicity == "white_nh",], aes(fill = pop_pre)) + scale_fill_viridis_c(option = "magma", direction = -1)
+# map low-income population by census tract - Hispanic/Latino ethnicity, any race
+ggplot() + geom_sf(data = town_polygon_sf[town_polygon_sf$race_ethnicity == "hispanic",], aes(fill = pop_pre)) + scale_fill_viridis_c(option = "magma", direction = -1)
 ```
 
 ```{r map baseline housing by township}
@@ -216,33 +332,16 @@ ggplot() + geom_sf(data = town_polygon, aes(fill = `Percent.Affordable`)) +
 ggplot() + geom_sf(data = town_polygon, aes(fill = `At least 10%?`))
 ```
 
-```{r map baseline population by census tract}
-# map families below poverty level by census tract - previous estimate used
-ggplot() + geom_sf(data = ct_tracts, aes(fill = estimate)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
-
-# map low-income population by census tract - new estimate used
-ggplot() + geom_sf(data = town_polygon, aes(fill = total_at_or_below_ami)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
-```
-
-```{r map baseline pollution by township}
-# map PM2.5 by town
-ggplot() + geom_sf(data = pm_town_sf, aes(fill = pm_mean)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1)
-```
-
 # Simulate movement into new housing with inverse distance weighting penalty
 
-```{r simulate movement of families, warning=FALSE}
+```{r set up weights for population movement, warning=FALSE}
 #load population-weighted centroids
 
 
 #find centroids for largest polygon per town
 centroids <- town_poly %>%
   st_centroid() %>% 
-  group_by(TOWN_NAME) %>% 
-  slice_max(order_by = SHAPE_Area)
+  group_by(TOWN_NAME)
 
 #assign weights to each pair of towns equal to inverse distance squared
   #list every town pair
@@ -257,7 +356,7 @@ weights <- data.frame(moved_from = rep(centroids$TOWN_NAME, times = nrow(centroi
 
 dist_0 <- weights %>% 
   filter(moved_from == moved_to) %>% 
-  select(moved_from, moved_to)
+  dplyr::select(moved_from, moved_to)
 
 for(i in 1:nrow(dist_0)) {
   dist_0$replace[i] <- town_poly %>% 
@@ -274,9 +373,9 @@ for(i in 1:nrow(dist_0)) {
 
 #select columns from low_income_pop to join with weights
 families_pre_town <- low_income_pop %>% 
-  select(moved_from = TOWN_NAME, total_at_or_below_ami) 
-dev_town <- low_income_pop %>% 
-  select(moved_to = `TOWN_NAME`, `Units Needed`)
+  dplyr::select(moved_from = TOWN_NAME, race_ethnicity, pop_pre) 
+dev_town <- housing_town %>% 
+  dplyr::select(moved_to = `TOWN_NAME`, `Units Needed`)
 
 #set seed for reproducible samples  
 set.seed(99814)
@@ -289,7 +388,7 @@ weights_pre <- weights %>%
   #replace zero-length distances with replacements (half of max distance w/in town)
   mutate(dist_new = if_else(distance == 0, replace, distance)) %>% 
   #group by town pre-move
-  group_by(moved_from) %>% 
+  group_by(moved_from, race_ethnicity) %>% 
   #round up units to integer
   mutate(prop_units = `Units Needed`/sum(`Units Needed`)) %>%
   #take inverse of distance squared
@@ -300,94 +399,122 @@ weights_pre <- weights %>%
   mutate(lambda = penalty/sum(penalty)) %>% 
   ungroup()
 
-#create new data frame of weights for post-simulation population movement
+# create new data frame of weights for post-simulation population movement
 weights_post <- weights_pre %>% 
-  #arrange by starting town
+  # arrange by starting town
   arrange(moved_from) %>% 
-  #create column for population moved in each town pair
+  # create column for population moved in each town pair
   mutate(pop_moved = 0)
+```
 
+```{r simulate movement of households in each racial/ethnic group}
+# initialize list for weights and town pairs for each racial/ethnic grouping
+weights_by_race <- list()
 
-#draw population moved from binomial distribution
-for(j in 0:168) {
-  weights_post$pop_moved[169*j+1] <- rbinom(1, size = weights_post$total_at_or_below_ami[169*j+1], prob = weights_post$lambda[169*j+1])
-  for(i in 2:169) {
-  weights_post$pop_moved[169*j+i] <- rbinom(1, size = weights_post$total_at_or_below_ami[169*j+i] - sum(weights_post$pop_moved[(169*j+1):(169*j+i)]), prob = weights_post$lambda[169*j+i])
+for(i in 1:length(race_eth)) {
+  ## filter town pairs and weights for each racial/ethnic grouping
+  weights_by_race[[i]] <- weights_post %>% filter(race_ethnicity == race_eth[i])
+  ## draw iteratively from binomial distribution from pool of households by starting town
+  for(j in 0:168) {
+    weights_by_race[[i]]$pop_moved[169*j+1] <- rbinom(1, size = weights_by_race[[i]]$pop_pre[169*j+1], prob = weights_by_race[[i]]$lambda[169*j+1])
+    for(k in 2:169) {
+      weights_by_race[[i]]$pop_moved[169*j+k] <- rbinom(1, size = weights_by_race[[i]]$pop_pre[169*j+k] - sum(weights_by_race[[i]]$pop_moved[(169*j+1):(169*j+k)]), prob = weights_by_race[[i]]$lambda[169*j+k])
+    }
   }
 }
 
-#view table
+weights_post <- bind_rows(weights_by_race[[1]], weights_by_race[[2]], weights_by_race[[3]], weights_by_race[[4]], weights_by_race[[5]], weights_by_race[[6]], weights_by_race[[7]], weights_by_race[[8]], weights_by_race[[9]])
+
+# view table
 head(weights_post)
 
-#check totals for consistency
-sum(weights_post$prop_units[weights_post$moved_from == "Waterbury"]) #should sum to 1
-sum(weights_post$lambda[weights_post$moved_from == "Branford"]) #should sum to 1
+# check totals for consistency
+## prop_units across all post-move towns within a given racial/ethnic group - should sum to 1
+weights_post %>% filter(race_ethnicity == "nh_pi", moved_from == "New Haven") %>% pull(prop_units) %>% sum()
+## lambda across all post-move towns within a given racial/ethnic group - should sum to 1
+weights_post %>% filter(race_ethnicity == "asian", moved_from == "New Haven") %>% pull(lambda) %>% sum()
 
-weights_post$total_at_or_below_ami[weights_post$moved_from == "New Haven"][1] #pre-move pop in given town
-sum(weights_post$pop_moved[weights_post$moved_from == "New Haven"]) #total families moved out of given town, should be no more than pre-move pop
+## pre-move pop in specified race in given town, should equal baseline pop
+weights_post %>% filter(race_ethnicity == "black", moved_from == "New Haven") %>% pull(pop_pre) %>% first()
+## baseline low-income households in specified race in specified town
+low_income_pop %>% filter(race_ethnicity == "black", TOWN_NAME == "New Haven") %>% pull(pop_pre)
+## post-move households in specified race moved out of given town, should be no more than pre-move pop
+weights_post %>% filter(race_ethnicity == "black", moved_from == "New Haven") %>% pull(pop_moved) %>% sum
 
-sum(weights_post$pop_moved) #total families drawn to move or stay, should be no more than total families across all towns
-sum(weights_post$total_at_or_below_ami[weights_post$moved_to == "Canaan"]) #should equal total families across all towns
-sum(low_income_pop$total_at_or_below_ami) #total families across all towns
-
+## total households across all towns and race/ethnicity groups - should equal total households
+a <- weights_post %>% filter(moved_to == "Waterbury") %>% pull(pop_pre) %>% sum()
+a
+## total baseline households across all towns and race/ethnicity groups
+low_income_pop %>% pull(pop_pre) %>% sum()
+## total households drawn to move or stay in specified race, should be no more than total households across all towns
+b <- weights_post %>% pull(pop_moved) %>% sum()
+b
+## percent of total households across all towns/groups that were drawn to move or stay
+b/a*100
+## percent of total households across all towns/groups that moved
+c <- weights_post %>% filter(moved_to != moved_from) %>% pull(pop_moved) %>% sum()
+c/a*100
 ```
 
-```{r summarize movement of families}
+```{r summarize population movement}
 #summarize families moved out by town
 moved_out <- weights_post %>% 
-  group_by(moved_from) %>% 
-  summarize(pop_pre = mean(total_at_or_below_ami), moved_out = sum(pop_moved)) %>% 
+  group_by(moved_from, race_ethnicity) %>%
+  summarize(pop_pre = mean(pop_pre), pop_out = sum(pop_moved)) %>% 
   rename(TOWN_NAME = moved_from)
 
 #summarize families moved in by town
 moved_in <- weights_post %>% 
-  group_by(moved_to) %>% 
-  summarize(moved_in = sum(pop_moved)) %>% 
+  group_by(moved_to, race_ethnicity) %>% 
+  summarize(pop_in = sum(pop_moved)) %>% 
   rename(TOWN_NAME = moved_to)
 
 #join moved_out and moved_in by town
 pop_town_moved <- moved_out %>% 
-  left_join(moved_in, by = "TOWN_NAME") %>% 
+  left_join(moved_in, by = c("TOWN_NAME", "race_ethnicity")) %>% 
   #subtract families moved out and add families moved in by town
-  mutate(pop_post = pop_pre + moved_in - moved_out)
+  mutate(pop_post = pop_pre + pop_in - pop_out)
 
 #join to town polygon
-towns_moved <- town_polygon %>% 
-  left_join(pop_town_moved, by = "TOWN_NAME")
+towns_moved <- town_polygon_sf %>% 
+  left_join(pop_town_moved, by = c("TOWN_NAME", "race_ethnicity")) %>%
+  group_by(TOWN_NAME) %>% 
+  mutate(all_pop_pre = sum(pop_pre.x), all_pop_in = sum(pop_in), all_pop_out = sum(pop_out), all_pop_post = sum(pop_post))
 
 # check that total families moved in and moved out match and do not exceed total population estimate
-sum(pop_town_moved$moved_out)
-sum(pop_town_moved$moved_in)
+pop_town_moved %>% pull(pop_out) %>% sum()
+pop_town_moved %>% pull(pop_in) %>% sum()
 
 # check that total families pre and post match total population estimate
-sum(pop_town_moved$pop_pre)
-sum(pop_town_moved$pop_post)
-sum(low_income_pop$total_at_or_below_ami)
+pop_town_moved %>% pull(pop_pre) %>% sum()
+pop_town_moved %>% pull(pop_post) %>% sum()
+towns_moved %>% pull(all_pop_pre) %>% sum()/length(race_eth)
+towns_moved %>% pull(all_pop_post) %>% sum()/length(race_eth)
+low_income_pop %>% pull(pop_pre) %>% sum()
 ```
 
-```{r map population by town pre and post move}
+```{r map total population by town pre, during, and post move}
 # map families by town pre-move
-ggplot() + geom_sf(data = towns_moved, aes(fill = pop_pre)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
-
+ggplot() + geom_sf(data = towns_moved, aes(fill = all_pop_pre)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1)
 # map families by town post-move
-ggplot() + geom_sf(data = towns_moved, aes(fill = pop_post)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
-
+ggplot() + geom_sf(data = towns_moved, aes(fill = all_pop_post)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1)
 # map families moving out or staying
-ggplot() + geom_sf(data = towns_moved, aes(fill = moved_out)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
-
+ggplot() + geom_sf(data = towns_moved, aes(fill = all_pop_out)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1)
 # map families moving in or staying
-ggplot() + geom_sf(data = towns_moved, aes(fill = moved_in)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
+ggplot() + geom_sf(data = towns_moved, aes(fill = all_pop_in)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1)
 ```
 
 ```{r estimate change in incidence}
 
-#assign dose-response relationships / health impact functions
-##all-cause mortality and PM2.5 - PLACEHOLDER, MADE UP
-dr_pm_allcause <- 0.0129 #1.29% increase in all-cause mortality per 1 ug/m3 increase in PM2.5
+#assign dose-response relationships / health impact functions for all-cause mortality
+dr_pm_allcause <- 1.12 #HR per 10 μg/m3 increase, Pope et al., 2019
+dr_o3_allcause <- 1.02 #HR per 10 ppb increase, Turner et al., 2016
+dr_no2_allcause <- 1.06 #HR per 10 ppb increase, Huang et al., 2021
+#dr_heat_allcause
 
 ##all-cause mortality and O3
 
@@ -397,26 +524,107 @@ dr_pm_allcause <- 0.0129 #1.29% increase in all-cause mortality per 1 ug/m3 incr
 
 #estimate change in exposure and incidence
 post_sim <- weights_post %>% 
-  select(TOWN_NAME = moved_from, moved_to, pop_moved) %>% 
-  #join mean PM2.5 by town pre-move
+  dplyr::select(TOWN_NAME = moved_from, moved_to, race_ethnicity, pop_moved) %>% 
+  ##join baseline all-cause mortality rates (per 100,000, currently using statewide)
+  mutate(mr_pre = allcause$Crude.Rate[1]) %>%
+  #PM2.5
+  ##join mean PM2.5 by town pre-move
   left_join(pm_town[,1:2], by = "TOWN_NAME") %>% 
   rename(pm_pre = pm_mean, moved_from = TOWN_NAME, TOWN_NAME = moved_to) %>% 
-  #join mean PM2.5 by town post-move
+  ##join mean PM2.5 by town post-move
   left_join(pm_town[,1:2], by = "TOWN_NAME") %>% 
   rename(pm_post = pm_mean, moved_to = TOWN_NAME) %>% 
-  #calculate difference (post-pre) in PM2.5 exposure
+  ##calculate difference (post-pre) in PM2.5 exposure
   mutate(pm_diff = pm_post - pm_pre) %>% 
-  #join baseline all-cause mortality rates (per 100,000, currently using statewide)
-  mutate(mr_pre = allcause$Crude.Rate[1]) %>% 
-  #join dose-response relationships / health impact functions (PM2.5 and all-cause mortality)
-  mutate(hif = dr_pm_allcause) %>% 
-  #calculate post-move mortality rates using health impact function
-  mutate(mr_post = mr_pre/(1 + dr_pm_allcause)^(pm_diff)) %>% 
-  #calculate absolute difference in mortality rates (post-pre)
-  mutate(mr_diff = mr_post - mr_pre) %>% 
-  #calculate deaths averted (each family assumed to have 4 individuals)
-  mutate(averted = -mr_diff*pop_moved/100000*4)
+  ##join health impact function (PM2.5 and all-cause mortality)
+  mutate(hif_pm = dr_pm_allcause) %>% 
+  #O3
+  ##join mean O3 by town pre-move
+  rename(TOWN_NAME = moved_from) %>% 
+  left_join(o3_town[,1:2], by = "TOWN_NAME") %>% 
+  rename(o3_pre = o3_mean, moved_from = TOWN_NAME, TOWN_NAME = moved_to) %>% 
+  ##join mean O3 by town post-move
+  left_join(o3_town[,1:2], by = "TOWN_NAME") %>% 
+  rename(o3_post = o3_mean, moved_to = TOWN_NAME) %>% 
+  ##calculate difference (post-pre) in O3 exposure
+  mutate(o3_diff = o3_post - o3_pre) %>% 
+  #join health impact function (O3 and all-cause mortality)
+  mutate(hif_o3 = dr_o3_allcause) %>% 
+  #NO2
+  ##join mean NO2 by town pre-move
+  rename(TOWN_NAME = moved_from) %>% 
+  left_join(no2_town[,1:2], by = "TOWN_NAME") %>% 
+  rename(no2_pre = no2_mean, moved_from = TOWN_NAME, TOWN_NAME = moved_to) %>% 
+  ##join mean NO2 by town post-move
+  left_join(no2_town[,1:2], by = "TOWN_NAME") %>% 
+  rename(no2_post = no2_mean, moved_to = TOWN_NAME) %>% 
+  ##calculate difference (post-pre) in NO2 exposure
+  mutate(no2_diff = no2_post - no2_pre) %>% 
+  ##join health impact function (NO2 and all-cause mortality)
+  mutate(hif_no2 = dr_no2_allcause) %>% 
+  #Calculate deaths averted
+  ##calculate post-move mortality rates using health impact functions
+  ###PM2.5
+  mutate(mr_pm = mr_pre*hif_pm^(pm_diff/10)) %>% 
+  ###O3
+  mutate(mr_o3 = mr_pre*hif_o3^(o3_diff/10)) %>% 
+  ###NO2
+  mutate(mr_no2 = mr_pre*hif_no2^(no2_diff/10)) %>% 
+  ##calculate absolute difference in mortality rates (post-pre)
+  ###PM2.5
+  mutate(diff_pm = mr_pm - mr_pre) %>%
+  ###O3
+  mutate(diff_o3 = mr_o3 - mr_pre) %>%
+  ###NO2
+  mutate(diff_no2 = mr_no2 - mr_pre) %>%
+  ## calculate deaths averted (each household assumed to have 4 individuals)
+  ### PM2.5  
+  mutate(averted_pm = -diff_pm*pop_moved/100000*4) %>% 
+  ### O3 
+  mutate(averted_o3 = -diff_o3*pop_moved/100000*4) %>% 
+  ### NO2 
+  mutate(averted_no2 = -diff_no2*pop_moved/100000*4)
   
-#sum total number of deaths averted
-sum(post_sim$averted)
+# sum total number of deaths averted
+## PM2.5
+averted_pm <- sum(post_sim$averted_pm)
+## O3
+averted_o3 <- sum(post_sim$averted_o3)
+## NO2
+averted_no2 <- sum(post_sim$averted_no2)
+
+#check post vs. pre-move deaths (sum across all families drawn)
+pre <- sum(post_sim$pop_moved*post_sim$mr_pre)*4/100000
+post_pm <- sum(post_sim$pop_moved*post_sim$mr_pm)*4/100000
+post_o3 <- sum(post_sim$pop_moved*post_sim$mr_o3)*4/100000
+post_no2 <- sum(post_sim$pop_moved*post_sim$mr_no2)*4/100000
+#should equal averted but negative
+post_pm - pre
+post_o3 - pre
+post_no2 - pre
 ```
+
+```{r estimate population attributable fractions}
+# observed cases = baseline deaths
+## total across all racial/ethnic groups
+observed <- allcause$Crude.Rate[1]*sum(low_income_pop$pop_pre)/100000*4
+observed
+# expected cases = counterfactual, deaths post-simulation; observed - expected = deaths averted post-simulation
+# Attributable fraction = (observed - expected)/observed
+## PM2.5
+paf_pm <- averted_pm/observed
+## O3
+paf_o3 <- averted_o3/observed
+## NO2
+paf_no2 <- averted_no2/observed
+# percent of observed deaths that are attributable to exposure (vs. counterfactual)
+paf_pm*100
+paf_o3*100
+paf_no2*100
+#for continuous exposure: PAF = (∫max, xc=min P(xc)RR(xc)dxc − ∫max, xcf=min P(xcf)RR(xcf)dxcf) / (∫max, xc=min P(xc)RR(xc)dxc) from Shield et al., 2016
+
+```
+
+
+
+

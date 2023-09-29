@@ -32,6 +32,7 @@ library(humidity)
 ```
 
 ```{r load shapefiles for CT census tracts}
+
 options(tigris_use_cache = TRUE)
 
 # list of 5-year ACS variables for reference
@@ -185,14 +186,25 @@ housing_town <- read.csv("Affordable_Housing_by_Town_2011-2022.csv") %>%
 ```
 
 ```{r load all-cause mortality incidence rates}
-# read county-level all-cause mortality rates from CDC WONDER
-allcause <- read.delim("Underlying Cause of Death, 2018-2021, Single Race_STATE.txt", sep = "\t")[1:2,-1]
+# read statewide all-cause mortality rates from CDC WONDER (non-Hispanic White, non-Hispanic Black)
+mortality_black_white <- read.delim("allcause_2019_race_ethnicity.txt", sep = "\t")[c(8,14), c(2,4,8)]
 
-allcause_race <- read.delim("Underlying Cause of Death, 1999-2020_RACE.txt", sep = "\t")[1:5,-1]
+mortality_asian <- read.delim("allcause_2019_race.txt", sep = "\t")[2, c(2,6)]
 
-allcause_race_county <- read.delim("Underlying Cause of Death, 1999-2020_COUNTY_RACE.txt", sep = "\t")[1:33, -1]
+mortality_hispanic <- read.delim("allcause_2019_ethnicity.txt", sep = "\t")[1, c(2,6)]
 
-allcause_race_county_ethn <- read.delim("Underlying Cause of Death, 1999-2020_COUNTY_RACE_ETHNICITY.txt", sep = "\t")[1:96, -1]
+mortality <- bind_rows(mortality_black_white, mortality_asian, mortality_hispanic) %>% 
+  mutate(race_ethnicity = case_match(Single.Race.6, "Black or African American" ~ "black_nh", "White" ~ "white_nh", "Asian" ~ "asian", NA ~ "hispanic")) %>% 
+  dplyr::select(race_ethnicity, mr_pre = Crude.Rate) %>% 
+  mutate(mr_pre = as.numeric(mr_pre))
+
+# allcause <- read.delim("Underlying Cause of Death, 2018-2021, Single Race_STATE.txt", sep = "\t")[1:2,-1]
+
+# allcause_race <- read.delim("Underlying Cause of Death, 1999-2020_RACE.txt", sep = "\t")[1:5,-1]
+# 
+# allcause_race_county <- read.delim("Underlying Cause of Death, 1999-2020_COUNTY_RACE.txt", sep = "\t")[1:33, -1]
+# 
+# allcause_race_county_ethn <- read.delim("Underlying Cause of Death, 1999-2020_COUNTY_RACE_ETHNICITY.txt", sep = "\t")[1:96, -1]
 ```
 
 ```{r load population data and clean population variables}
@@ -355,6 +367,27 @@ ggplot() + geom_sf(data = town_polygon, aes(fill = Percent.Affordable)) +
 ggplot() + geom_sf(data = town_polygon, aes(fill = at_least_10))
 ```
 
+```{r define exposures and dose-response relationships}
+
+# assign dose-response relationships / health impact functions for all-cause mortality
+dr_pm_allcause <- 1.12 # HR per 10 μg/m3 increase, Pope et al., 2019
+cl_pm <- 1.08 # lower bound, 95% CI
+cu_pm <- 1.15 # upper bound, 95% CI
+
+dr_o3_allcause <- 1.02 # HR per 10 ppb increase, Turner et al., 2016
+cl_o3 <- 1.01 # lower bound, 95% CI
+cu_o3 <- 1.04 # upper bound, 95% CI
+
+dr_no2_allcause <- 1.06 # HR per 10 ppb increase, Huang et al., 2021
+cl_no2 <- 1.04 # lower bound, 95% CI
+cu_no2 <- 1.08 # upper bound, 95% CI
+
+dr_heat_allcause <- 1.014 # rate ratio per 5 F increase (lag 0), Wellenius et al., 2017
+cl_heat <- 1.004 # lower bound, 95% CI
+cu_heat <- 1.024 # upper bound, 95% CI
+
+```
+
 # Simulate movement into new housing with inverse distance weighting penalty
 
 ```{r set up weights for population movement, warning=FALSE}
@@ -429,6 +462,7 @@ weights_post <- weights_pre %>%
 ```
 
 ```{r simulate movement of households in each racial/ethnic group}
+
 # create vector of race/ethnic groups present in summary data
 race_eth_2 <- weights_post %>% pull(race_ethnicity) %>% unique()
 # initialize list for weights and town pairs for each racial/ethnic grouping
@@ -448,38 +482,6 @@ for(i in 1:length(race_eth_2)) {
 
 weights_post <- bind_rows(weights_by_race)
 
-# view table
-head(weights_post)
-
-# check totals for consistency
-## prop_units across all post-move towns within a given racial/ethnic group - should sum to 1
-weights_post %>% filter(race_ethnicity == "white_nh", moved_from == "Andover") %>% pull(prop_units) %>% sum()
-## lambda across all post-move towns within a given racial/ethnic group - should sum to 1
-weights_post %>% filter(race_ethnicity == "asian_nh", moved_from == "New Haven") %>% pull(lambda) %>% sum()
-
-## pre-move pop in specified race in given town, should equal baseline pop
-weights_post %>% filter(race_ethnicity == "black_nh", moved_from == "New Haven") %>% pull(pop_pre) %>% first()
-## baseline low-income households in specified race in specified town
-low_income_pop %>% filter(race_ethnicity == "black_nh", TOWN_NAME == "New Haven") %>% pull(pop_pre)
-## post-move households in specified race moved out of given town, should be no more than pre-move pop
-weights_post %>% filter(race_ethnicity == "black_nh", moved_from == "New Haven") %>% pull(pop_moved) %>% sum()
-
-## total households across all towns and race/ethnicity groups - should equal total households
-a <- weights_post %>% filter(moved_to == "Waterbury") %>% pull(pop_pre) %>% sum()
-a
-## total baseline households across all towns and race/ethnicity groups
-low_income_pop %>% pull(pop_pre) %>% sum()
-## total households drawn to move or stay, should be no more than total households across all towns
-b <- weights_post %>% pull(pop_moved) %>% sum()
-b
-## percent of total households across all towns/groups that were drawn to move or stay
-b/a
-## percent of total households across all towns/groups that moved
-c <- weights_post %>% filter(moved_to != moved_from) %>% pull(pop_moved) %>% sum()
-c/a
-```
-
-```{r summarize population movement}
 #summarize families moved out by town
 moved_out <- weights_post %>% 
   group_by(moved_from, race_ethnicity) %>%
@@ -502,17 +504,6 @@ pop_town_moved <- moved_out %>%
 towns_moved <- town_polygon_sf %>% 
   left_join(pop_town_moved, by = c("TOWN_NAME", "race_ethnicity"))
 
-# check that total families moved in and moved out match and do not exceed total population estimate
-pop_town_moved %>% pull(pop_out) %>% sum()
-pop_town_moved %>% pull(pop_in) %>% sum()
-
-# check that total families pre and post match total population estimate
-pop_town_moved %>% pull(pop_pre) %>% sum()
-pop_town_moved %>% pull(pop_post) %>% sum()
-low_income_pop %>% pull(pop_pre) %>% sum()
-```
-
-```{r summarize population movement by ethnoracial group}
 white_nh_sim <- towns_moved %>% 
   filter(race_ethnicity == "white_nh")
 
@@ -523,62 +514,11 @@ total_sim <- towns_moved %>%
   group_by(TOWN_NAME) %>% 
   summarize(all_pre = sum(pop_pre.x), all_in = sum(pop_in), all_out = sum(pop_out), all_post = sum(pop_post))
 
-# check that total families pre and post match total population estimate
-total_sim %>% pull(all_pre) %>% sum()
-total_sim %>% pull(all_post) %>% sum()
-low_income_pop %>% pull(pop_pre) %>% sum()
-```
-
-```{r map total population by town pre, during, and post move}
-# map families by town pre-move
-ggplot() + geom_sf(data = total_sim, aes(fill = all_pre)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1)
-# map families by town post-move
-ggplot() + geom_sf(data = total_sim, aes(fill = all_post)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1)
-# map families moving out or staying
-ggplot() + geom_sf(data = total_sim, aes(fill = all_out)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1)
-# map families moving in or staying
-ggplot() + geom_sf(data = total_sim, aes(fill = all_in)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1)
-
-# map families by town pre-move - Non-Hispanic Black households
-ggplot() + geom_sf(data = black_nh_sim, aes(fill = pop_pre.x)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1)
-# map families by town post-move - Non-Hispanic Black households
-ggplot() + geom_sf(data = black_nh_sim, aes(fill = pop_post)) + 
-  scale_fill_viridis_c(option = "magma", direction = -1)
-```
-
-```{r define exposure to extreme heat}
-
-# assign dose-response relationships / health impact functions for all-cause mortality
-dr_pm_allcause <- 1.12 # HR per 10 μg/m3 increase, Pope et al., 2019
-cl_pm <- 1.08 # lower bound, 95% CI
-cu_pm <- 1.15 # upper bound, 95% CI
-
-dr_o3_allcause <- 1.02 # HR per 10 ppb increase, Turner et al., 2016
-cl_o3 <- 1.01 # lower bound, 95% CI
-cu_o3 <- 1.04 # upper bound, 95% CI
-
-dr_no2_allcause <- 1.06 # HR per 10 ppb increase, Huang et al., 2021
-cl_no2 <- 1.04 # lower bound, 95% CI
-cu_no2 <- 1.08 # upper bound, 95% CI
-
-dr_heat_allcause <- 1.014 # rate ratio per 5 F increase (lag 0), Wellenius et al., 2017
-cl_heat <- 1.004 # lower bound, 95% CI
-cu_heat <- 1.024 # upper bound, 95% CI
-
-```
-
-```{r estimate change in incidence}
-
 # estimate change in exposure and incidence
 post_sim <- weights_post %>% 
   dplyr::select(TOWN_NAME = moved_from, moved_to, race_ethnicity, pop_moved) %>% 
   ## join baseline all-cause mortality rates (per 100,000, currently using statewide)
-  mutate(mr_pre = allcause$Crude.Rate[1]) %>%
+  left_join(mortality, by = "race_ethnicity") %>% 
   # PM2.5
   ## join mean PM2.5 by town pre-move
   left_join(pm_town[,1:2], by = "TOWN_NAME") %>% 
@@ -634,7 +574,7 @@ post_heat <- weights_post %>%
   mutate(heatindex = if_else(heatindex_pre >= 75 & heatindex < 75, 75, heatindex)) %>% 
   mutate(fahr_diff = if_else(heatindex_pre < 75 & heatindex < 75, 0, (heatindex - heatindex_pre))) %>% 
   # join baseline all-cause mortality rates (per 100,000, currently using statewide)
-  mutate(mr_pre = allcause$Crude.Rate[1]) %>%
+  left_join(mortality, by = "race_ethnicity") %>% 
   mutate(hif_heat = dr_heat_allcause, cl_heat = cl_heat, cu_heat = cu_heat) %>% 
   mutate(across(c(hif_heat, cl_heat, cu_heat), ~ pop_moved/100000*4*mr_pre*(fahr_diff/5)*(.x-1))) %>% 
   group_by(moved_from, moved_to, race_ethnicity) %>% 
@@ -645,31 +585,153 @@ post_heat <- weights_post %>%
 averted_by_race <- post_sim %>%
   left_join(post_heat, by = c("moved_to", "moved_from", "race_ethnicity")) %>% 
   group_by(race_ethnicity) %>% 
-  summarize(across(c(hif_pm, cl_pm, cu_pm, hif_o3, cl_o3, cu_o3, hif_no2, cl_no2, cu_no2, hif_heat, cl_heat, cu_heat), ~ round(-sum(.x), 1)))
+  summarize(across(c(hif_pm, cl_pm, cu_pm, hif_o3, cl_o3, cu_o3, hif_no2, cl_no2, cu_no2, hif_heat, cl_heat, cu_heat), ~ -sum(.x)))
 
-averted_totals <- averted_by_race %>% 
-  ungroup() %>% 
-  summarize(across(hif_pm:cu_heat, ~ sum(.x)))
+head(post_sim)
+head(post_heat)
+averted_by_race
 
-#check pre-move vs. post-move cumulative exposure (sum across all families drawn)
-## PM2.5
-pre_exp_pm <- post_sim %>% mutate(exp = pop_moved*pm_pre) %>% pull(exp) %>% sum()
-post_exp_pm <- post_sim %>% mutate(exp = pop_moved*pm_post) %>% pull(exp) %>% sum()
-post_exp_pm - pre_exp_pm # should be negative if exposure decreased
-## O3
-pre_exp_o3 <- post_sim %>% mutate(exp = pop_moved*o3_pre) %>% pull(exp) %>% sum()
-post_exp_o3 <- post_sim %>% mutate(exp = pop_moved*o3_post) %>% pull(exp) %>% sum()
-post_exp_o3 - pre_exp_o3 # should be negative if exposure decreased
-## NO2
-pre_exp_no2 <- post_sim %>% mutate(exp = pop_moved*no2_pre) %>% pull(exp) %>% sum()
-post_exp_no2 <- post_sim %>% mutate(exp = pop_moved*no2_post) %>% pull(exp) %>% sum()
-post_exp_no2 - pre_exp_no2 # should be negative if exposure decreased
-## Heat
-pre_exp_heat <- post_heat %>% mutate(exp = pop_moved*heatindex_pre) %>% pull(exp) %>% sum()
-post_exp_heat <- post_heat %>% mutate(exp = pop_moved*heatindex) %>% pull(exp) %>% sum()
-post_exp_heat - pre_exp_heat # should be negative if exposure decreased
+# simulate_pop_moved <- function() {
+#   simulate_all()
+#   return(towns_moved)
+# }
+# 
+# simulate_averted_by_race <- function() {
+#   simulate_all()
+#   return(averted_by_race)
+# }
 
 ```
+
+```{r pollutant exposure pre/post summary table}
+
+# pollutants_prepost <- post_sim %>% 
+#   dplyr::select(moved_from, moved_to, race_ethnicity, pop_moved, pm_pre, pm_post, o3_pre, o3_post, no2_pre, no2_post)
+
+heat_annual <- heat_town_sf %>% 
+  group_by(NAME) %>% 
+  summarize(heat_mean = mean(heatindex))
+  
+heat_annual <- heat_annual %>% rename(TOWN_NAME = NAME)
+
+pollutants_prepost <- pop_town_moved %>% 
+  left_join(pm_town[,1:2], by = "TOWN_NAME") %>% 
+  left_join(o3_town[,1:2], by = "TOWN_NAME") %>% 
+  left_join(no2_town[,1:2], by = "TOWN_NAME") %>% 
+  left_join(heat_annual, by = "TOWN_NAME") %>% 
+  mutate(across(c(pm_mean, o3_mean, no2_mean, heat_mean), ~.x*pop_pre, .names = "{.col}_pre")) %>% 
+  mutate(across(c(pm_mean, o3_mean, no2_mean, heat_mean), ~.x*pop_post, .names = "{.col}_post")) %>% 
+  ungroup() %>% 
+  summarize(pop_pre = sum(pop_pre), pop_post = sum(pop_post), pm_pre = sum(pm_mean_pre), pm_post = sum(pm_mean_post), o3_pre = sum(o3_mean_pre), o3_post = sum(o3_mean_post), no2_pre = sum(no2_mean_pre), no2_post = sum(no2_mean_post), heat_pre = sum(heat_mean_pre), heat_post = sum(heat_mean_post)) %>% 
+  mutate(across(1:10, ~ .x/pop_pre))
+
+head(pollutants_prepost)
+
+# avg exposures pre
+
+# avg exposures post
+
+
+```
+
+```{r run simulation x number of times}
+
+# pop_moved_rep <- replicate(3, simulate_pop_moved())
+# 
+# averted_by_race_rep <- replicate(100, simulate_averted_by_race())
+
+```
+
+```{r map total population by town pre, during, and post move}
+
+# map families by town pre-move
+ggplot() + geom_sf(data = total_sim, aes(fill = all_pre)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1, limits = c(0, 40000)) + theme_minimal() 
+# map families by town post-move
+ggplot() + geom_sf(data = total_sim, aes(fill = all_post)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1, begin = 0, end = 1, limits = c(0, 40000)) + theme_minimal()
+
+# map families moving out or staying
+ggplot() + geom_sf(data = total_sim, aes(fill = all_out)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1)
+# map families moving in or staying
+ggplot() + geom_sf(data = total_sim, aes(fill = all_in)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1)
+
+# map families by town pre-move - Non-Hispanic Black households
+ggplot() + geom_sf(data = black_nh_sim, aes(fill = pop_pre.x)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1)
+# map families by town post-move - Non-Hispanic Black households
+ggplot() + geom_sf(data = black_nh_sim, aes(fill = pop_post)) + 
+  scale_fill_viridis_c(option = "magma", direction = -1)
+```
+
+```{r figures for poster}
+
+# bar chart, total deaths averted by pollutant/exposure
+averted_totals <- averted_by_race %>% 
+  ungroup() %>% 
+  summarize(across(hif_pm:cu_heat, ~ sum(.x))) 
+
+averted_totals_2 <- averted_totals %>% 
+  mutate(PM2.5 = paste0(hif_pm, " (", cu_pm, ", ", cl_pm, ")")) %>% 
+  mutate(O3 = paste0(hif_o3, " (", cu_o3, ", ", cl_o3, ")")) %>% 
+  mutate(NO2 = paste0(hif_no2, " (", cl_no2, ", ", cu_no2, ")")) %>%
+  mutate(Heat = paste0(hif_heat, " (", cl_heat, ", ", cu_heat, ")")) %>% 
+  dplyr::select(PM2.5:Heat)
+
+# format with 95% CI's
+averted_by_race_tbl <- averted_by_race %>% 
+  mutate(PM2.5 = paste0(hif_pm, " (", cu_pm, ", ", cl_pm, ")")) %>% 
+  mutate(O3 = paste0(hif_o3, " (", cu_o3, ", ", cl_o3, ")")) %>% 
+  mutate(NO2 = paste0(hif_no2, " (", cl_no2, ", ", cu_no2, ")")) %>%
+  mutate(Heat = paste0(hif_heat, " (", cl_heat, ", ", cu_heat, ")")) %>% 
+  dplyr::select(race_ethnicity, PM2.5:Heat)
+
+
+
+
+averted_bar <- averted_totals %>% 
+  pivot_longer(cols = c(hif_pm, hif_o3, hif_no2, hif_heat), names_to = "Pollutant", values_to = "Deaths Averted") %>%
+  mutate(cl = case_match(Pollutant, "hif_pm" ~ cl_pm, "hif_o3" ~ cl_o3, "hif_no2" ~ cl_no2, "hif_heat" ~ cl_heat)) %>% 
+  mutate(cu = case_match(Pollutant, "hif_pm" ~ cu_pm, "hif_o3" ~ cu_o3, "hif_no2" ~ cu_no2, "hif_heat" ~ cu_heat)) %>% 
+  mutate(Pollutant = case_match(Pollutant, "hif_pm" ~ "PM2.5", "hif_o3" ~ "O3", "hif_no2" ~ "NO2", "hif_heat" ~ "Heat")) %>% 
+  dplyr::select(Pollutant:cu)
+
+averted_barchart <- ggplot() + geom_col(data = averted_bar, aes(x = Pollutant, y = `Deaths Averted`, fill = Pollutant)) + geom_errorbar(data = averted_bar, aes(x = Pollutant, ymin = cl, ymax = cu), width = 0.2) + theme_minimal()
+
+ggsave("averted_bar_chart.png", averted_barchart, dpi = 700, width = 5, height = 4)
+
+# rates
+
+pop_race <- pop_town_moved %>% 
+  group_by(race_ethnicity) %>% 
+  summarize(pop_pre = sum(pop_pre)) %>% 
+  left_join(mortality, by = "race_ethnicity") %>% 
+  mutate(deaths_pre = mr_pre*pop_pre*4/100000)
+
+averted_by_race_rates <- averted_by_race %>% 
+  left_join(pop_race, by = "race_ethnicity") %>% 
+  mutate(across(2:13, ~ round(.x/deaths_pre*100, 2))) %>%
+  mutate(PM2.5 = paste0(hif_pm, "% (", cu_pm, ", ", cl_pm, ")")) %>% 
+  mutate(O3 = paste0(hif_o3, "% (", cu_o3, ", ", cl_o3, ")")) %>% 
+  mutate(NO2 = paste0(hif_no2, "% (", cl_no2, ", ", cu_no2, ")")) %>%
+  mutate(Heat = paste0(hif_heat, "% (", cl_heat, ", ", cu_heat, ")")) %>% 
+  dplyr::select(race_ethnicity, PM2.5:Heat)
+  
+total_deaths <- sum(pop_race$deaths_pre)
+
+total_rates <- averted_totals %>% 
+  mutate(deaths_pre = round(total_deaths, 0)) %>% 
+  mutate(across(1:12, ~ round(.x/deaths_pre*100, 2))) %>% 
+  mutate(PM2.5 = paste0(hif_pm, "% (", cu_pm, ", ", cl_pm, ")")) %>% 
+  mutate(O3 = paste0(hif_o3, "% (", cu_o3, ", ", cl_o3, ")")) %>% 
+  mutate(NO2 = paste0(hif_no2, "% (", cl_no2, ", ", cu_no2, ")")) %>%
+  mutate(Heat = paste0(hif_heat, "% (", cl_heat, ", ", cu_heat, ")")) %>% 
+  dplyr::select(PM2.5:Heat)
+
+```
+
 
 ```{r estimate population attributable fractions}
 # observed cases = baseline deaths

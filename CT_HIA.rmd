@@ -71,8 +71,9 @@ town_poly <- st_read("CT Vicinity Town Polygon/CT_Vicinity_Town_Polygon.shp") %>
 pm_tract <- read.delim(gzfile("2019_pm25_daily_average.txt.gz"), sep = ",") %>%
 ## include only Connecticut tracts - FIPS starting with 9
   filter(str_detect(`FIPS`, "^9")) %>% 
-## include only index date - July 4, 2019
-  filter(`Date` == "2019/07/04") %>% 
+## take annual average
+  group_by(FIPS) %>% 
+  summarize(pm_mean = mean(pm25_daily_average.ug.m3.)) %>% 
 ## format FIPS to match GEOID format used by tidycensus get_acs
   mutate(GEOID = str_pad(FIPS, 11, side = "left", pad = "0"))
 
@@ -80,8 +81,9 @@ pm_tract <- read.delim(gzfile("2019_pm25_daily_average.txt.gz"), sep = ",") %>%
 o3_tract <- read.delim(gzfile("2019_ozone_daily_8hour_maximum.txt.gz"), sep = ",") %>%
 ## include only Connecticut tracts - FIPS starting with 9
   filter(str_detect(`FIPS`, "^9")) %>% 
-## include only index date - July 4, 2019
-  filter(`Date` == "2019/07/04") %>% 
+## take annual average
+  group_by(FIPS) %>% 
+  summarize(o3_mean = mean(ozone_daily_8hour_maximum.ppb.)) %>% 
 ## format FIPS to match GEOID format used by tidycensus get_acs
   mutate(GEOID = str_pad(FIPS, 11, side = "left", pad = "0"))
 
@@ -303,13 +305,13 @@ tract_town$TOWN_NAME[nrow(tract_town)] <- "Norfolk"
 pm_town <- tract_town %>%
   right_join(pm_tract, by = "GEOID") %>%
   group_by(`TOWN_NAME`) %>% 
-  summarize(pm_mean = mean(`pm25_daily_average.ug.m3.`, na.rm = TRUE), `Standard Deviation (ug/m3)` = sd(`pm25_daily_average.ug.m3.`, na.rm = TRUE), `Min` = min(`pm25_daily_average.ug.m3.`, na.rm = TRUE), `Max` = max(`pm25_daily_average.ug.m3.`, na.rm = TRUE), `IQR (ug/m3)` = IQR(`pm25_daily_average.ug.m3.`, na.rm = TRUE))
+  summarize(pm_mean = mean(pm_mean, na.rm = TRUE), `Standard Deviation (ug/m3)` = sd(pm_mean, na.rm = TRUE), `Min` = min(pm_mean, na.rm = TRUE), `Max` = max(pm_mean, na.rm = TRUE), `IQR (ug/m3)` = IQR(pm_mean, na.rm = TRUE))
 
 # summarize mean and standard deviation of tract-level ozone estimates by town
 o3_town <- tract_town %>%
   right_join(o3_tract, by = "GEOID") %>%
   group_by(`TOWN_NAME`) %>% 
-  summarize(o3_mean = mean(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE), `Standard Deviation (ppb)` = sd(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE), `Min O3` = min(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE), `Max O3` = max(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE), `IQR (ppb)` = IQR(`ozone_daily_8hour_maximum.ppb.`, na.rm = TRUE)) 
+  summarize(o3_mean = mean(o3_mean, na.rm = TRUE), `Standard Deviation (ppb)` = sd(o3_mean, na.rm = TRUE), `Min O3` = min(o3_mean, na.rm = TRUE), `Max O3` = max(o3_mean, na.rm = TRUE), `IQR (ppb)` = IQR(o3_mean, na.rm = TRUE)) 
 
 # join to town polygon
 pm_town_sf <- town_poly %>% 
@@ -329,11 +331,11 @@ no2_town <- no2_town_sf %>%
 
 ```{r map baseline PM2.5 and ozone by tract}
 # map PM2.5 by census tract with town lines
-ggplot() + geom_sf(data = ct_tracts, aes(fill = pm25_daily_average.ug.m3.)) + 
+ggplot() + geom_sf(data = ct_tracts, aes(fill = pm_mean)) + 
   scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
 
 # map O3 by census tract with town lines
-ggplot() + geom_sf(data = ct_tracts, aes(fill = ozone_daily_8hour_maximum.ppb.)) + scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
+ggplot() + geom_sf(data = ct_tracts, aes(fill = o3_mean)) + scale_fill_viridis_c(option = "magma", direction = -1) + geom_sf(data = town_lines)
 ```
 
 ```{r map baseline pollution by township}
@@ -674,6 +676,7 @@ averted_totals <- averted_by_race %>%
   summarize(across(hif_pm:cu_heat, ~ sum(.x))) 
 
 averted_totals_2 <- averted_totals %>% 
+  mutate(across(hif_pm:cu_heat, ~ round(.x, 0))) %>% 
   mutate(PM2.5 = paste0(hif_pm, " (", cu_pm, ", ", cl_pm, ")")) %>% 
   mutate(O3 = paste0(hif_o3, " (", cu_o3, ", ", cl_o3, ")")) %>% 
   mutate(NO2 = paste0(hif_no2, " (", cl_no2, ", ", cu_no2, ")")) %>%
@@ -682,6 +685,7 @@ averted_totals_2 <- averted_totals %>%
 
 # format with 95% CI's
 averted_by_race_tbl <- averted_by_race %>% 
+  mutate(across(hif_pm:cu_heat, ~ round(.x, 0))) %>% 
   mutate(PM2.5 = paste0(hif_pm, " (", cu_pm, ", ", cl_pm, ")")) %>% 
   mutate(O3 = paste0(hif_o3, " (", cu_o3, ", ", cl_o3, ")")) %>% 
   mutate(NO2 = paste0(hif_no2, " (", cl_no2, ", ", cu_no2, ")")) %>%

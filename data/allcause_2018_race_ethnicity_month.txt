@@ -1,0 +1,69 @@
+"Notes"	"Month"	"Month Code"	"Single Race 6"	"Single Race 6 Code"	"Hispanic Origin"	"Hispanic Origin Code"	Deaths	Population	Crude Rate	Crude Rate Lower 95% Confidence Interval	Crude Rate Upper 95% Confidence Interval	Crude Rate Standard Error
+	"May, 2018"	"2018/05"	"Asian"	"A"	"Not Hispanic or Latino"	"2186-2"	27	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"May, 2018"	"2018/05"	"Black or African American"	"2054-5"	"Not Hispanic or Latino"	"2186-2"	196	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"May, 2018"	"2018/05"	"White"	"2106-3"	"Hispanic or Latino"	"2135-2"	141	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"May, 2018"	"2018/05"	"White"	"2106-3"	"Not Hispanic or Latino"	"2186-2"	2127	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Jun., 2018"	"2018/06"	"Asian"	"A"	"Not Hispanic or Latino"	"2186-2"	32	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Jun., 2018"	"2018/06"	"Black or African American"	"2054-5"	"Hispanic or Latino"	"2135-2"	11	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Jun., 2018"	"2018/06"	"Black or African American"	"2054-5"	"Not Hispanic or Latino"	"2186-2"	196	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Jun., 2018"	"2018/06"	"White"	"2106-3"	"Hispanic or Latino"	"2135-2"	120	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Jun., 2018"	"2018/06"	"White"	"2106-3"	"Not Hispanic or Latino"	"2186-2"	2006	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Jul., 2018"	"2018/07"	"Asian"	"A"	"Not Hispanic or Latino"	"2186-2"	23	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Jul., 2018"	"2018/07"	"Black or African American"	"2054-5"	"Not Hispanic or Latino"	"2186-2"	206	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Jul., 2018"	"2018/07"	"White"	"2106-3"	"Hispanic or Latino"	"2135-2"	140	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Jul., 2018"	"2018/07"	"White"	"2106-3"	"Not Hispanic or Latino"	"2186-2"	2142	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Aug., 2018"	"2018/08"	"Asian"	"A"	"Not Hispanic or Latino"	"2186-2"	25	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Aug., 2018"	"2018/08"	"Black or African American"	"2054-5"	"Not Hispanic or Latino"	"2186-2"	197	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Aug., 2018"	"2018/08"	"White"	"2106-3"	"Hispanic or Latino"	"2135-2"	144	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Aug., 2018"	"2018/08"	"White"	"2106-3"	"Not Hispanic or Latino"	"2186-2"	2084	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Sep., 2018"	"2018/09"	"Asian"	"A"	"Not Hispanic or Latino"	"2186-2"	30	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Sep., 2018"	"2018/09"	"Black or African American"	"2054-5"	"Not Hispanic or Latino"	"2186-2"	208	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Sep., 2018"	"2018/09"	"White"	"2106-3"	"Hispanic or Latino"	"2135-2"	146	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+	"Sep., 2018"	"2018/09"	"White"	"2106-3"	"Not Hispanic or Latino"	"2186-2"	2047	Not Applicable	Not Applicable	Not Applicable	Not Applicable	Not Applicable
+"---"
+"Dataset: Underlying Cause of Death, 2018-2021, Single Race"
+"Query Parameters:"
+"Title: allcause_2018_race_ethnicity_month"
+"States: Connecticut (09)"
+"Year/Month: May, 2018; Jun., 2018; Jul., 2018; Aug., 2018; Sep., 2018"
+"Group By: Month; Single Race 6; Hispanic Origin"
+"Show Totals: Disabled"
+"Show Zero Values: False"
+"Show Suppressed: False"
+"Calculate Rates Per: 100,000"
+"Rate Options: Default intercensal populations for years 2001-2009 (except Infant Age Groups)"
+"---"
+"Help: See http://wonder.cdc.gov/wonder/help/ucd-expanded.html for more information."
+"---"
+"Query Date: Nov 7, 2023 3:45:39 PM"
+"---"
+"Suggested Citation: Centers for Disease Control and Prevention, National Center for Health Statistics. National Vital Statistics"
+"System, Mortality 2018-2021 on CDC WONDER Online Database, released in 2021. Data are from the Multiple Cause of Death Files,"
+"2018-2021, as compiled from data provided by the 57 vital statistics jurisdictions through the Vital Statistics Cooperative"
+"Program. Accessed at http://wonder.cdc.gov/ucd-icd10-expanded.html on Nov 7, 2023 3:45:39 PM"
+"---"
+Messages:
+"1. Totals are not available for these results due to suppression constraints. More Information:"
+"http://wonder.cdc.gov/wonder/help/faq.html#Privacy."
+"2. Rows with zero Deaths are hidden. Use Quick Options above to show zero rows."
+"3. Rows with suppressed Deaths are hidden. Use Quick Options above to show suppressed rows."
+"---"
+Caveats:
+"1. Population and rates are labeled 'Not Applicable' when Autopsy, Place of Death, Weekday or Month are grouped by or limited,"
+"due to lack of a valid population. More information: http://wonder.cdc.gov/wonder/help/ucd-expanded.html#NotApplicableRates."
+"2. Data are Suppressed when the data meet the criteria for confidentiality constraints. More information:"
+"http://wonder.cdc.gov/wonder/help/ucd-expanded.html#Assurance of Confidentiality."
+"3. Death rates are flagged as Unreliable when the rate is calculated with a numerator of 20 or less. More information:"
+"http://wonder.cdc.gov/wonder/help/ucd-expanded.html#Unreliable."
+"4. Deaths of persons with Hispanic origin ""Not Stated"" are included in ""All"" counts and rates, but are not distributed among"
+"Hispanic Origin groups, so are not included in the Hispanic Origin specific counts and rates. More information:"
+"http://wonder.cdc.gov/wonder/help/ucd-expanded.html#Not Stated."
+"5. Information included on the death certificate about the race and Hispanic ethnicity of the decedent is reported by the"
+"funeral director as provided by an informant, often the surviving next of kin, or, in the absence of an informant, on the basis"
+"of observation. Race and ethnicity information from the census is by self-report. To the extent that race and Hispanic origin"
+"are inconsistent between these two data sources, death rates will be biased. More information:"
+"http://wonder.cdc.gov/wonder/help/ucd-expanded.html#Racial Differences."
+"6. The method used to calculate 95% confidence intervals is documented here: More information:"
+"http://wonder.cdc.gov/wonder/help/ucd-expanded.html#Confidence-Intervals."
+"7. The method used to calculate standard errors is documented here: More information:"
+"http://wonder.cdc.gov/wonder/help/ucd-expanded.html#Standard-Errors."

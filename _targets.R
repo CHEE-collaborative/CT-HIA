@@ -5,17 +5,18 @@ library(future)
 library(crew)
 
 source("Functions.R")
+
 options(tigris_use_cache = TRUE)
 
 ################ CUSTOMIZE THE FOLLOWING BEFORE RUNNING tar_make() #############
 # required - define your Census API key here
-census_key <- "a7039d631ed49f01684692eb70d4a1ae0590c919"
+census_key <- ""
 
 # required - define your HUD API key here
-hud_key <- "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiI2IiwianRpIjoiM2ZkZTMwZTUzNTZlOGIwNzNjMmI2NjJmMjY0MDU0NWM2YjFjYjY2MGNmY2Q2Mzk3NTRkNTMyODAwYjYyNmI0NTQ5ZDFjMGUxYmVlMTk0NzciLCJpYXQiOjE3MDk0MDAxMDYuODY2ODE2LCJuYmYiOjE3MDk0MDAxMDYuODY2ODE4LCJleHAiOjIwMjQ5MzI5MDYuODYzMjAxLCJzdWIiOiI2MDk0NCIsInNjb3BlcyI6W119.LW2Hf5uydiz3H3Gd4umaHJ_KMJhNia1lwqi19Q4zaUHM9LYAwmqAp4a-GRwsAgRVYFZQAQsf9pJGeW1LdtFNMQ"
+hud_key <- ""
 
 # optional - replace 10 with desired number of simulation repeats (1,000 for full simulation)
-n <- 2
+n <- 10
 
 # optional - replace 1 with desired number of parallel workers (if greater than availableCores()-1, will default to availableCores()-1)
 max_workers <- 1

@@ -20,7 +20,7 @@ download_data <- function() {
   # housing
   if(!file.exists(here("data", "Affordable_Housing_by_Town_2011-2022.csv"))){download.file("https://data.ct.gov/resource/3udy-56vi.csv", destfile = here("data", "Affordable_Housing_by_Town_2011-2022.csv"))}
 
-  downloads <- 1
+  downloads <- list.files(here("data"))
   return(downloads)
 }
 
@@ -49,6 +49,15 @@ get_exposures_town <- function(year = "2019", CT_townships, downloads) {
     # match extent
     crop(ext(CT_townships))
   
+  # load tract total population for population weighting - for tract centroid estimates
+  pop_tract <- get_acs(geography = "tract", state = "CT", year = as.numeric(year), 
+    variables = "B01003_001", geometry = TRUE) %>% 
+    # get centroids
+    st_centroid() %>% 
+    # join towns
+    st_join(CT_townships, join = st_intersects) %>% 
+    rename(GEOID = GEOID.x, NAME = NAME.y)
+
   # read in PM2.5 daily average by census tract from EPA FAQSD
   pm_tract <- read.delim(gzfile(here("data", paste0(year, "_pm25_daily_average.txt.gz"))), sep = ",") %>%
     ## include only Connecticut tracts - FIPS starting with 9
@@ -60,13 +69,14 @@ get_exposures_town <- function(year = "2019", CT_townships, downloads) {
     mutate(GEOID = str_pad(FIPS, 11, side = "left", pad = "0"))
   
   # summarize mean tract-level ozone estimates by town
-  pm_town <- tracts(state = "CT", year = year) %>%
-    # join tract-level exposures (excluding area of Long Island Sound)
-    right_join(pm_tract) %>% 
-    # calculate areal average by town
-    st_interpolate_aw(x = .["pm_mean"], to = CT_townships, extensive = FALSE, keep_NA = TRUE) %>% 
-    # add town names based on row order
-    mutate(NAME = CT_townships$NAME) %>% 
+  pm_town <- pop_tract %>%
+    # join tract-level exposures
+    right_join(pm_tract, by = "GEOID") %>% 
+    # calculate population-weighted average by town
+    group_by(NAME) %>%
+    summarize(pm_mean = weighted.mean(pm_mean, w = estimate)) %>% 
+    # duplicate Norfolk estimate for Canaan - part of same census tract
+    bind_rows(., data.frame("NAME" = "Canaan", "pm_mean" = .$pm_mean[.$NAME == "Norfolk"])) %>% 
     st_drop_geometry()
   
   # read in ozone daily 8-hour maximum by census tract from EPA FAQSD (external file)
@@ -80,13 +90,14 @@ get_exposures_town <- function(year = "2019", CT_townships, downloads) {
     mutate(GEOID = str_pad(FIPS, 11, side = "left", pad = "0"))
   
   # summarize mean tract-level ozone estimates by town
-  o3_town <- tracts(state = "CT", year = year) %>%
-    # join tract-level exposures (excluding area of Long Island Sound)
-    right_join(o3_tract) %>% 
-    # calculate areal average by town
-    st_interpolate_aw(x = .["o3_mean"], to = CT_townships, extensive = FALSE) %>% 
-    # add town names
-    mutate(NAME = CT_townships$NAME) %>% 
+  o3_town <- pop_tract %>%
+    # join tract-level exposures
+    right_join(o3_tract, by = "GEOID") %>% 
+    # calculate population-weighted average by town
+    group_by(NAME) %>%
+    summarize(o3_mean = weighted.mean(o3_mean, w = estimate)) %>% 
+    # duplicate Norfolk estimate for Canaan - part of same census tract
+    bind_rows(., data.frame("NAME" = "Canaan", "o3_mean" = .$o3_mean[.$NAME == "Norfolk"])) %>% 
     st_drop_geometry()
   
   # read in NO2 data
@@ -591,7 +602,7 @@ get_post_heat_1 <- function(year = "2019", weights_post, exposures_town, mortali
 }
 
 # simulation
-simulate_cf <- function(weights_post, post_sim_1, post_heat_1, n = 2) {
+simulate_cf <- function(weights_post, post_sim_1, post_heat_1, n) {
   # assign dose-response relationships / health impact functions for all-cause mortality
   beta_pm_mean <- log(1.12) # beta per 10 μg/m3 increase, Pope et al., 2019
   SE_pm <- (beta_pm_mean - log(1.08))/1.96 # standard error
@@ -698,7 +709,28 @@ simulate_cf <- function(weights_post, post_sim_1, post_heat_1, n = 2) {
       pull(pop_moved) %>% 
       sum()
     
-    averted_by_race_pop_town_moved <- c(averted_by_race, pop_town_moved, total_number_moved)
+    # pull counts moved in
+    moved_in_town <- weights_post_1 %>%
+      # exclude non-moves
+      filter(moved_from != moved_to) %>% 
+      ungroup() %>% 
+      arrange(moved_to) %>% 
+      group_by(moved_to) %>% 
+      summarize(pop_moved = sum(pop_moved)) %>% 
+      pull(pop_moved)
+    
+    # pull counts moved out
+    moved_out_town <- weights_post_1 %>%
+      # exclude non-moves
+      filter(moved_from != moved_to) %>% 
+      ungroup() %>% 
+      arrange(moved_from) %>% 
+      group_by(moved_from) %>% 
+      summarize(pop_moved = sum(pop_moved)) %>% 
+      pull(pop_moved)
+    
+    averted_by_race_pop_town_moved <- c(averted_by_race, pop_town_moved, total_number_moved,
+                                        moved_in_town, moved_out_town)
     
     return(averted_by_race_pop_town_moved)
   }
@@ -846,6 +878,89 @@ exhibit4 <- function(town_polygon_sf, all_sims) {
 
   return(exhibit4)
   
+}
+
+figure_exposures <- function(town_polygon_sf, all_sims, exposures_town) {
+  
+  # collapse max_income
+  town_polygon_sf_2 <- town_polygon_sf %>%
+    group_by(GEOID, NAME, race_ethnicity, percent_assisted, at_least_10, new_units) %>% 
+    summarize(pop_pre = sum(pop_pre)) %>% 
+    ungroup()
+  
+  # average population moved over all simulation runs
+  sim_moved_avg <- all_sims %>%
+    unlist() %>%
+    .[25:700,] %>% 
+    rowMeans()
+  
+  # join average population moved to town polygon
+  sim_moved_totals <- town_polygon_sf_2 %>% 
+    arrange(race_ethnicity, NAME) %>% 
+    mutate(pop_post = round(sim_moved_avg, 0))
+  
+  # collapse ethnoracial groupings
+  sim_moved_totals_2 <- sim_moved_totals %>% 
+    group_by(GEOID, NAME, percent_assisted, at_least_10, new_units) %>% 
+    summarize(pop_pre = sum(pop_pre), pop_post = sum(pop_post))
+  
+  # join pollutants by town
+  pollutants_prepost <- sim_moved_totals_2 %>%
+    left_join(st_drop_geometry(exposures_town), by = "NAME") 
+  
+  # make vectors to calculate mean and percentiles - pre-move
+  exposures_pre <- data.frame(pm = rep(x = pollutants_prepost$pm_mean, times = pollutants_prepost$pop_pre)) %>% 
+    mutate(o3 = rep(x = pollutants_prepost$o3_mean, times = pollutants_prepost$pop_pre)) %>% 
+    mutate(no2 = rep(x = pollutants_prepost$no2_mean, times = pollutants_prepost$pop_pre)) %>% 
+    mutate(heat = rep(x = pollutants_prepost$heat_annual_mean, times = pollutants_prepost$pop_pre)) %>% 
+    mutate(ndvi = rep(x = pollutants_prepost$ndvi_mean, times = pollutants_prepost$pop_pre)) %>% 
+    mutate(noise = rep(x = pollutants_prepost$noise_mean, times = pollutants_prepost$pop_pre)) %>% 
+    mutate(when = "Baseline")
+  
+  # make vectors to calculate mean and percentiles - post-move
+  exposures_post <- data.frame(pm = rep(x = pollutants_prepost$pm_mean, times = pollutants_prepost$pop_post)) %>% 
+    mutate(o3 = rep(x = pollutants_prepost$o3_mean, times = pollutants_prepost$pop_post)) %>% 
+    mutate(no2 = rep(x = pollutants_prepost$no2_mean, times = pollutants_prepost$pop_post)) %>% 
+    mutate(heat = rep(x = pollutants_prepost$heat_annual_mean, times = pollutants_prepost$pop_post)) %>% 
+    mutate(ndvi = rep(x = pollutants_prepost$ndvi_mean, times = pollutants_prepost$pop_post)) %>%
+    mutate(noise = rep(x = pollutants_prepost$noise_mean, times = pollutants_prepost$pop_post)) %>% 
+    mutate(when = "Post-Simulation")
+  
+  # combine exposures pre and post
+  exposures_pre_post <- bind_rows(exposures_pre, exposures_post) %>% 
+    # change order for NDVI pre/post
+    mutate(when_ndvi = factor(when, levels = c("Post-Simulation", "Baseline")))
+  
+  # make list for figures
+  figure_exposures <- list()
+  
+  # plot pre/post density distributions
+  figure_exposures[[1]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = pm, fill = when), alpha = 0.6) +
+    labs(x = "PM2.5 (µg/m3)", y = "Density", fill = "Scenario") + 
+    scale_colour_brewer(type = "qual", palette = 6, aesthetics = "fill") + 
+    theme_minimal()
+  figure_exposures[[2]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = o3, fill = when), alpha = 0.6) +
+    labs(x = "O3 (ppb)", y = "Density", fill = "Scenario") + 
+    scale_colour_brewer(type = "qual", palette = 6, aesthetics = "fill") + 
+    theme_minimal()
+  figure_exposures[[3]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = no2, fill = when), alpha = 0.6) +
+    labs(x = "NO2 (ppb)", y = "Density", fill = "Scenario") + 
+    scale_colour_brewer(type = "qual", palette = 6, aesthetics = "fill") + 
+    theme_minimal()
+  figure_exposures[[4]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = heat, fill = when), alpha = 0.6) +
+    labs(x = "Heat Index (°C)", y = "Density", fill = "Scenario") + 
+    scale_colour_brewer(type = "qual", palette = 6, aesthetics = "fill") + 
+    theme_minimal()
+  figure_exposures[[5]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = ndvi, fill = when_ndvi), alpha = 0.6) +
+    labs(x = "Greenness (NDVI)", y = "Density", fill = "Scenario") + 
+    scale_colour_brewer(type = "qual", palette = 6, aesthetics = "fill", direction = -1, breaks = c("Baseline", "Post-Simulation")) + 
+    theme_minimal()
+  figure_exposures[[6]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = noise, fill = when), alpha = 0.6) +
+    labs(x = "Noise (dB)", y = "Density", fill = "Scenario") + 
+    scale_colour_brewer(type = "qual", palette = 6, aesthetics = "fill") + 
+    theme_minimal()
+  
+  return(figure_exposures)
 }
 
 tableS2 <- function(town_polygon_sf, all_sims, exposures_town) {
@@ -1291,7 +1406,269 @@ simulate_cf_18 <- function(exposures_town_18, CT_townships, downloads, n) {
 
 }
 
-save_exhibits <- function(exhibit1, exhibit2, exhibit1_data, exhibit2_data, exhibit3, exhibit4, figureS1, figureS2, figureS3_S6, tableS1, figureS7, tableS2, exhibitA12, exhibitA13, avg_moved, avg_moved_s1, avg_moved_18) {
+get_weights_drive <- function(CT_townships) {
+  
+  # unzip GPW data
+  unzip(here("data", "gpw-v4-population-count-rev11_2020_30_sec_tif.zip"), files = "gpw_v4_population_count_rev11_2020_30_sec.tif", exdir = here("data"))
+  
+  gpw <- read_stars(here("data", "gpw_v4_population_count_rev11_2020_30_sec.tif"))
+  
+  CT_towns <- CT_townships %>% 
+    st_transform(st_crs(gpw))
+  
+  gpw_CT <- st_crop(gpw, CT_towns)
+  
+  centroids <- st_as_sf(gpw_CT) %>% 
+    st_centroid() %>%
+    rename(pop = "gpw_v4_population_count_rev11_2020_30_sec.tif") %>%
+    st_join(., CT_towns, join = st_intersects) %>%
+    st_transform(., crs = 2234) %>%
+    bind_cols(., st_coordinates(.)) %>%
+    st_drop_geometry() %>%
+    group_by(NAME) %>%
+    summarise(pop_centroid_x = weighted.mean(x = X, w = pop),
+              pop_centroid_y = weighted.mean(x = Y, w = pop)) %>%
+    st_as_sf(coords = c("pop_centroid_x", "pop_centroid_y"), crs = 2234) %>% 
+    st_transform(crs = crs(CT_townships)) %>% 
+    # add index column
+    mutate(index = 1:169)
+  
+  # assign average travel time based on ACS 5-year 2019 estimate
+  avg_travel_time <- 26.6
+  
+  # create empty lists for isochrones
+  isochrones_26 <- list()
+  isochrones_60 <- list()
+  
+  # set longer timeout
+  options(timeout = 9000)
+  
+  # prevent error from duplicate vertex
+  sf_use_s2(FALSE)
+  
+  # create isochrones for each starting pop-weighted centroid - 26.6 min car travel
+  for(i in 1:169) {
+    isochrones_26[[i]] <- osrmIsochrone(loc = centroids$geometry[i], 
+                                        breaks = c(0, avg_travel_time),
+                                        osrm.profile = "car") %>% 
+      pull(geometry)
+  }
+  
+  # create isochrones for each starting pop-weighted centroid - 60 min car travel
+  for(i in 1:169) {
+    isochrones_60[[i]] <- osrmIsochrone(loc = centroids$geometry[i], 
+                                        breaks = c(0, 60),
+                                        osrm.profile = "car") %>% 
+      pull(geometry)
+  }
+  
+  # add town names by isochrone - 30 minute buffers
+  iso_26 <- purrr::map(1:169, ~ mutate(as_tibble(isochrones_26[[.x]]), 
+                                       NAME = centroids$NAME[.x])) %>% 
+    bind_rows() %>% 
+    st_as_sf()
+  
+  # add town names by isochrone - 60 minute buffers
+  iso_60 <- purrr::map(1:169, ~ mutate(as_tibble(isochrones_60[[.x]]), 
+                                       NAME = centroids$NAME[.x])) %>% 
+    bind_rows() %>% 
+    st_as_sf()
+  
+  # find centroids that intersect with isochrone - 30 minutes
+  buffer_26 <- iso_26 %>% 
+    st_intersects(centroids)
+  
+  # find centroids that intersect with isochrone - 60 minutes
+  buffer_60 <- iso_60 %>% 
+    st_intersects(centroids)
+  
+  ## list every pre-move town
+  moves <- data.frame(NAME = rep(centroids$NAME, times = nrow(centroids))) %>% 
+    ## list every post-move town for each pre-move town
+    mutate(moved_to = rep(centroids$NAME, times = rep(nrow(centroids), nrow(centroids)))) %>% 
+    ## join pre-move centroids and indices
+    left_join(centroids, by = "NAME") %>% 
+    ## join post-move centroids and indices
+    rename(moved_from = NAME, NAME = moved_to, centr_from = geometry, index_from = index) %>% 
+    left_join(centroids, by = "NAME") %>% 
+    rename(moved_to = NAME, centr_to = geometry, index_to = index)
+  
+  for(i in 1:nrow(moves)) {
+    ## create binary variable - post centroid intersects with pre isochrone - 30 min
+    moves$iso_26[i] <- if_else(moves$index_to[i] %in% buffer_26[[moves$index_from[i]]], 
+                               1, 0)
+    
+    ## create binary variable - post centroid intersects with pre isochrone - 60 min
+    moves$iso_60[i] <- if_else(moves$index_to[i] %in% buffer_60[[moves$index_from[i]]], 
+                               1, 0)
+  }
+  
+  weights_drive <- moves
+  
+  return(weights_drive)
+  
+}
+
+simulate_cf_drive <- function(low_income_pop, housing_town, weights, AMI_limits, post_sim_1, post_heat_1, n) {
+  
+  get_weights_post_drive <- function(low_income_pop, housing_town, weights, AMI_limits) {
+    
+    # get ACS variable labels for travel time variables
+    var_labels <- load_variables(year = 2019, dataset = "acs5") %>% 
+      rename(variable = name) %>% 
+      dplyr::select(variable, label)
+    
+    # get estimates of travel time to work
+    travel_times <- get_acs(geography = "state", state = "CT", table = "B08012", year = 2019, 
+                            survey = "acs5") %>%
+      left_join(var_labels, by = "variable") %>% 
+      filter(!str_detect(label, regex("Male|Female")), variable != "B08012_001") %>% 
+      mutate(max_time = c(4, 9, 14, 19, 24, 29, 34, 39, 44, 59, 89, 9999)) %>% 
+      mutate(prop = estimate/sum(estimate), cum_prop = cumsum(estimate)/sum(estimate))
+    
+    # derive relative difference in probability of having a travel time between buffers vs. within first buffer
+    factor_buffer <- travel_times$cum_prop[travel_times$max_time == 29]/
+      (travel_times$cum_prop[travel_times$max_time == 59] - 
+         travel_times$cum_prop[travel_times$max_time == 29])
+    
+    # select columns from low_income_pop to join households by pre-move town with weights
+    families_pre_town <- low_income_pop %>% 
+      dplyr::select(moved_from = NAME, race_ethnicity, max_income, pop_pre, avg_size) 
+    
+    # select columns from housing_town to join new units with weights by post-move town
+    dev_town <- housing_town %>% 
+      left_join(AMI_limits, by = "NAME") %>% 
+      dplyr::select(moved_to = NAME, new_units, limit) 
+    
+    weights_pre_drive <- weights %>%
+      # join pre-move town households
+      left_join(families_pre_town, by = "moved_from") %>% 
+      # join post-move new units
+      left_join(dev_town, by = "moved_to") %>% 
+      # filter for only eligible moves
+      filter(max_income <= limit) %>% 
+      # collapse income brackets
+      group_by(moved_from, moved_to, race_ethnicity) %>% 
+      summarize(pop_pre = sum(pop_pre), avg_size = first(avg_size), 
+                new_units = first(new_units), buffer_26 = first(iso_26), 
+                buffer_60 = first(iso_60)) %>% 
+      ungroup() %>% 
+      # group by town pre-move and group
+      group_by(moved_from, race_ethnicity) %>% 
+      # round up units to integer
+      mutate(prop_units = new_units/sum(new_units)) %>%
+      # assign weights using drive time buffers - 2.4x probability if in 26 min, 0 if outside 60 min
+      mutate(buffer_weight = if_else(buffer_60 == 0, 0, if_else(buffer_26 == 0, 1, 
+                                                                factor_buffer))) %>%
+      # calculate crude penalty using families (pre-move town), proportion of new units (post-move town), and drive time weights (post-move town)
+      mutate(penalty = prop_units*buffer_weight) %>%
+      # turn penalty into weighted probability that sums to 1 for any given starting town and group
+      mutate(lambda = penalty/sum(penalty)) %>%
+      ungroup()
+    
+    weights_post_drive <- weights_pre_drive %>%  
+      # arrange by starting town
+      arrange(moved_from) %>% 
+      # create column for population moved in each town pair
+      mutate(pop_moved = 0)
+    
+    return(weights_post_drive)
+    
+  }
+  
+  weights_post_drive <- get_weights_post_drive(low_income_pop = low_income_pop,
+                                               housing_town = housing_town,
+                                               weights = weights,
+                                               AMI_limits = AMI_limits)
+    
+  # set seed for reproducible samples
+  set.seed(99814)
+  
+  # repeat simulation x times
+  all_sims_drive <- simulate_cf(weights_post = weights_post_drive, 
+                                post_sim_1 = post_sim_1, 
+                                post_heat_1 = post_heat_1, 
+                                n = n)
+  
+  return(all_sims_drive)
+}
+
+exhibit_incomelimits <- function(CT_townships, AMI_limits) {
+  
+  limits_sf <- CT_townships %>% 
+    left_join(AMI_limits, by = "NAME") %>% 
+    mutate(limit = factor(limit))
+  
+  exhibit_incomelimits <- ggplot() + geom_sf(data = limits_sf, aes(fill = limit)) + theme_minimal() +
+    labs(fill = "HMFA Low-Income Limit") + scale_colour_brewer(type = "div", 
+    aesthetics = "fill", palette = "Set2", direction = -1)
+  
+  return(exhibit_incomelimits)
+}
+
+get_number_AMI_restricted <- function(low_income_pop, AMI_limits) {
+  
+  # pull the 2 unique low-income limits for 2019
+  unique_limits <- AMI_limits$limit %>% unique()
+  
+  # get proportion with income brackets between limits
+  number_AMI_restricted <- low_income_pop %>% 
+    left_join(AMI_limits, by = "NAME") %>% 
+    ungroup() %>% 
+    mutate(between = if_else(max_income > min(unique_limits), 1, 0)) %>% 
+    group_by(between) %>% 
+    summarize(count = sum(pop_pre)) %>% 
+    ungroup() %>% 
+    mutate(prop = count/sum(count))
+  
+  return(number_AMI_restricted)
+}
+
+car_usage_pre_post <- function(sim_moved_totals_2) {
+  
+  # get car commute prevalence by town in 2019
+  car_town <- get_acs(geography = "county subdivision", state = "CT", variables = c("B08006_001", "B08006_002"), 
+    year = 2019, output = "wide") %>% 
+    mutate(prop_car = B08006_002E/B08006_001E)
+  
+  car_usage <- sim_moved_totals_2 %>% 
+    # join car usage by town
+    left_join(car_town, by = "GEOID")
+  
+  # make vector to calculate average - pre-move
+  cars_pre <- rep(x = car_usage$prop_car, times = car_usage$pop_pre)
+  
+  # make vectors to calculate average - post-move
+  cars_post <- rep(x = car_usage$prop_car, times = car_usage$pop_post)
+  
+  car_usage_pre_post <- data.frame(avg_pre = median(cars_pre), avg_post = median(cars_post))
+  
+  return(car_usage_pre_post)
+}
+  
+save_exhibits <- function(exhibit1, 
+                          exhibit2, 
+                          exhibit1_data, 
+                          exhibit2_data, 
+                          exhibit3, 
+                          exhibit4, 
+                          figureS1, 
+                          figureS2, 
+                          figureS3_S6, 
+                          tableS1, 
+                          figureS7, 
+                          tableS2, 
+                          exhibitA12, 
+                          exhibitA13, 
+                          avg_moved, 
+                          avg_moved_s1, 
+                          avg_moved_18, 
+                          exhibitA14, 
+                          avg_moved_drive, 
+                          exhibit_incomelimits,
+                          figure_exposures,
+                          number_AMI_restricted,
+                          car_usage_pre_post) {
   
   if(!dir.exists(here("output"))){dir.create(here("output"))}
   
@@ -1354,6 +1731,14 @@ save_exhibits <- function(exhibit1, exhibit2, exhibit1_data, exhibit2_data, exhi
   # exhibit A10 - dissimilarity index by county, pre/post map
   ggsave(figureS7, filename = here("output", "exhibitA10.png"), width = 10, height = 3, units = "in")
   
+  # exhibit ? - exposures pre/post figure
+  ggsave(figure_exposures[[1]], filename = here("output", "exhibit_exposures_a.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figure_exposures[[2]], filename = here("output", "exhibit_exposures_b.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figure_exposures[[3]], filename = here("output", "exhibit_exposures_c.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figure_exposures[[4]], filename = here("output", "exhibit_exposures_d.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figure_exposures[[5]], filename = here("output", "exhibit_exposures_e.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figure_exposures[[6]], filename = here("output", "exhibit_exposures_f.png"), width = 4.5, height = 3, units = "in")
+  
   # exhibit A11 - exposures pre/post table
   write.csv(tableS2, here("output", "exhibitA11.csv"))
   
@@ -1363,8 +1748,20 @@ save_exhibits <- function(exhibit1, exhibit2, exhibit1_data, exhibit2_data, exhi
   # exhibit A13 - sensitivity analysis, using 2018 data
   write.csv(exhibitA13, here("output", "exhibitA13.csv"))
   
+  # exhibit A14 - sensitivity analysis, using drive time buffers
+  write.csv(exhibitA14, here("output", "exhibitA14.csv"))
+  
+  # exhibit A16 - HMFA income limits 2019 map
+  ggsave(exhibit_incomelimits, filename = here("output", "exhibitA16.png"), width = 4.5, height = 3, units = "in")
+  
   # average moved - main analysis
   write.csv(avg_moved, here("output", "avg_moved.csv"))
+  
+  # number AMI restricted
+  # write.csv(number_AMI_restricted, here("output", "number_AMI_restricted.csv"))
+  
+  # car usage
+  write.csv(car_usage_pre_post, here("output", "car_usage_pre_post.csv"))
   
   # average moved - sensitivity analysis 1
   write.csv(avg_moved_s1, here("output", "avg_moved_s1.csv"))
@@ -1372,4 +1769,11 @@ save_exhibits <- function(exhibit1, exhibit2, exhibit1_data, exhibit2_data, exhi
   # average moved - sensitivity analysis 2
   write.csv(avg_moved_18, here("output", "avg_moved_s2.csv"))
   
+  # average moved - sensitivity analysis 3
+  write.csv(avg_moved_drive, here("output", "avg_moved_drive.csv"))
 }
+
+
+
+
+

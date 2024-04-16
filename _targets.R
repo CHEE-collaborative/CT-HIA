@@ -9,13 +9,13 @@ options(tigris_use_cache = TRUE)
 
 ################ CUSTOMIZE THE FOLLOWING BEFORE RUNNING tar_make() #############
 # required - define your Census API key here
-census_key <- ""
+census_key <- "a7039d631ed49f01684692eb70d4a1ae0590c919"
 
 # required - define your HUD API key here
-hud_key <- ""
+hud_key <- "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiI2IiwianRpIjoiM2ZkZTMwZTUzNTZlOGIwNzNjMmI2NjJmMjY0MDU0NWM2YjFjYjY2MGNmY2Q2Mzk3NTRkNTMyODAwYjYyNmI0NTQ5ZDFjMGUxYmVlMTk0NzciLCJpYXQiOjE3MDk0MDAxMDYuODY2ODE2LCJuYmYiOjE3MDk0MDAxMDYuODY2ODE4LCJleHAiOjIwMjQ5MzI5MDYuODYzMjAxLCJzdWIiOiI2MDk0NCIsInNjb3BlcyI6W119.LW2Hf5uydiz3H3Gd4umaHJ_KMJhNia1lwqi19Q4zaUHM9LYAwmqAp4a-GRwsAgRVYFZQAQsf9pJGeW1LdtFNMQ"
 
 # optional - replace 10 with desired number of simulation repeats (1,000 for full simulation)
-n <- 10
+n <- 2
 
 # optional - replace 1 with desired number of parallel workers (if greater than availableCores()-1, will default to availableCores()-1)
 max_workers <- 1
@@ -47,7 +47,8 @@ tar_option_set(
     "future",
     "future.apply",
     "OasisR",
-    "ggpubr"
+    "ggpubr",
+    "osrm"
   ),
   format = 'rds', 
   workspace_on_error = TRUE,
@@ -143,6 +144,9 @@ list(
   tar_target(tableS1, {
     tableS1(all_sims = all_sims, town_polygon_sf = town_polygon_sf)
   }),
+  tar_target(figure_exposures, {
+    figure_exposures(town_polygon_sf = town_polygon_sf, all_sims = all_sims, exposures_town = exposures_town)
+  }),
   tar_target(tableS2, {
     tableS2(town_polygon_sf = town_polygon_sf, all_sims = all_sims, exposures_town = exposures_town)
   }),
@@ -158,7 +162,15 @@ list(
   tar_target(figureS7, {
     figureS7(tableS1 = tableS1)
   }),
-  
+  tar_target(exhibit_incomelimits, {
+    exhibit_incomelimits(CT_townships = CT_townships, AMI_limits = AMI_limits)
+  }),
+  tar_target(number_AMI_restricted, {
+    get_number_AMI_restricted(low_income_pop = low_income_pop, AMI_limits = AMI_limits)
+  }),
+  tar_target(car_usage_pre_post, {
+    car_usage_pre_post(sim_moved_totals_2 = sim_moved_totals_2)
+  }),
   # Sensitivity Analysis 1
   tar_target(all_sims_s1, {
     if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
@@ -196,6 +208,29 @@ list(
     if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
     get_avg_moved(all_sims = all_sims_18, town_polygon_sf = town_polygon_sf)
     }),
+  # Sensitivity Analysis 3
+  tar_target(weights_drive, {
+    if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
+    get_weights_drive(CT_townships = CT_townships)
+  }),
+  tar_target(all_sims_drive, {
+    if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
+    simulate_cf_drive(low_income_pop = low_income_pop,
+                      housing_town = housing_town,
+                      weights = weights_drive, 
+                      AMI_limits = AMI_limits,
+                      post_sim_1 = post_sim_1,
+                      post_heat_1 = post_heat_1,
+                      n = n)
+  }),
+  tar_target(exhibitA14, {
+    if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
+    exhibit3(all_sims = all_sims_drive)
+  }),
+  tar_target(avg_moved_drive, {
+    if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
+    get_avg_moved(all_sims = all_sims_drive, town_polygon_sf = town_polygon_sf)
+  }),
   # Save results
   tar_target(save_exhibits, {
     save_exhibits(exhibit1 = exhibit1,
@@ -212,9 +247,15 @@ list(
                   tableS2 = tableS2,
                   exhibitA12 = exhibitA12,
                   exhibitA13 = exhibitA13,
+                  exhibitA14 = exhibitA14,
                   avg_moved = avg_moved,
                   avg_moved_s1 = avg_moved_s1,
-                  avg_moved_18 = avg_moved_18)
+                  avg_moved_18 = avg_moved_18,
+                  avg_moved_drive = avg_moved_drive,
+                  exhibit_incomelimits = exhibit_incomelimits,
+                  figure_exposures = figure_exposures,
+                  number_AMI_restricted = number_AMI_restricted,
+                  car_usage_pre_post = car_usage_pre_post)
   })
 )
 

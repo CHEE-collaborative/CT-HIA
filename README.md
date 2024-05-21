@@ -67,6 +67,6 @@ tar_read(figure2B)
 tar_read(table1)
 tar_read(table2)
 ```
-Supplementary tables and figures can also be read this way, by supplying the corresponding target names (e.g. "exhibitA13").
+Supplementary tables and figures can also be read this way, by supplying the corresponding target names (e.g. `tar_read(figureA2)` will display Figure A2a and Figure A2b).
 
 Additionally, after running the pipeline, all main or supplementary figures and tables will be saved in the "output" folder created in your local repository.

@@ -745,7 +745,7 @@ simulate_cf <- function(weights_post, post_sim_1, post_heat_1, n) {
   
 }
 
-exhibit3 <- function(all_sims) {
+get_table1 <- function(all_sims) {
   
   # assign labels
   group_labels <- c("Asian", "Non-Hispanic Black", "Hispanic/Latino", "Non-Hispanic White")
@@ -789,12 +789,12 @@ exhibit3 <- function(all_sims) {
     mutate(across(averted_mean:cu, ~ round(.x, 0))) 
   
   # format final table of deaths averted by group and totals
-  exhibit3 <- stratified_tbl %>% 
+  table1 <- stratified_tbl %>% 
     mutate(averted = paste0(averted_mean, " (", cl, ", ", cu, ")")) %>%
     dplyr::select(`Ethnoracial Group` = race_ethnicity, exposure, averted) %>% 
     pivot_wider(names_from = exposure, values_from = averted)
 
-  return(exhibit3)
+  return(table1)
 }
 
 get_avg_moved <- function(all_sims, town_polygon_sf) {
@@ -813,7 +813,7 @@ get_avg_moved <- function(all_sims, town_polygon_sf) {
   return(avg_moved)
 }
 
-exhibit4 <- function(town_polygon_sf, all_sims) {
+get_table2 <- function(town_polygon_sf, all_sims) {
   
   # assign labels
   group_labels <- c("Asian", "Non-Hispanic Black", "Hispanic/Latino", "Non-Hispanic White")
@@ -866,7 +866,7 @@ exhibit4 <- function(town_polygon_sf, all_sims) {
     adorn_totals()
   
   # rates of deaths averted
-  exhibit4 <- all_sims_avg %>%
+  table2 <- all_sims_avg %>%
     bind_rows(total_tbl) %>% 
     mutate(race_ethnicity = case_match(race_ethnicity, "Asian" ~ "asian", "Hispanic/Latino" ~ "hispanic", "Non-Hispanic Black" ~ "black_nh", "Non-Hispanic White" ~ "white_nh", "Total" ~ "Total")) %>% 
     left_join(pop_by_ethnoracial, by = "race_ethnicity") %>% 
@@ -876,11 +876,11 @@ exhibit4 <- function(town_polygon_sf, all_sims) {
     pivot_wider(names_from = exposure, values_from = averted_rate) %>% 
     mutate(`Ethnoracial Group` = case_match(`Ethnoracial Group`, "asian" ~ "Asian", "hispanic" ~ "Hispanic/Latino", "black_nh" ~ "Non-Hispanic Black", "white_nh" ~ "Non-Hispanic White", "Total" ~ "Total"))
 
-  return(exhibit4)
+  return(table2)
   
 }
 
-figure_exposures <- function(town_polygon_sf, all_sims, exposures_town) {
+get_figureA8 <- function(town_polygon_sf, all_sims, exposures_town) {
   
   # collapse max_income
   town_polygon_sf_2 <- town_polygon_sf %>%
@@ -932,38 +932,38 @@ figure_exposures <- function(town_polygon_sf, all_sims, exposures_town) {
     mutate(when_ndvi = factor(when, levels = c("Post-Simulation", "Baseline")))
   
   # make list for figures
-  figure_exposures <- list()
+  figureA8 <- list()
   
   # plot pre/post density distributions
-  figure_exposures[[1]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = pm, fill = when), alpha = 0.6) +
+  figureA8[[1]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = pm, fill = when), alpha = 0.6) +
     labs(x = "PM2.5 (µg/m3)", y = "Density", fill = "Scenario") + 
     scale_colour_brewer(type = "qual", palette = 6, aesthetics = "fill") + 
     theme_minimal()
-  figure_exposures[[2]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = o3, fill = when), alpha = 0.6) +
+  figureA8[[2]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = o3, fill = when), alpha = 0.6) +
     labs(x = "O3 (ppb)", y = "Density", fill = "Scenario") + 
     scale_colour_brewer(type = "qual", palette = 6, aesthetics = "fill") + 
     theme_minimal()
-  figure_exposures[[3]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = no2, fill = when), alpha = 0.6) +
+  figureA8[[3]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = no2, fill = when), alpha = 0.6) +
     labs(x = "NO2 (ppb)", y = "Density", fill = "Scenario") + 
     scale_colour_brewer(type = "qual", palette = 6, aesthetics = "fill") + 
     theme_minimal()
-  figure_exposures[[4]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = heat, fill = when), alpha = 0.6) +
+  figureA8[[4]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = heat, fill = when), alpha = 0.6) +
     labs(x = "Heat Index (°C)", y = "Density", fill = "Scenario") + 
     scale_colour_brewer(type = "qual", palette = 6, aesthetics = "fill") + 
     theme_minimal()
-  figure_exposures[[5]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = ndvi, fill = when_ndvi), alpha = 0.6) +
+  figureA8[[5]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = ndvi, fill = when_ndvi), alpha = 0.6) +
     labs(x = "Greenness (NDVI)", y = "Density", fill = "Scenario") + 
     scale_colour_brewer(type = "qual", palette = 6, aesthetics = "fill", direction = -1, breaks = c("Baseline", "Post-Simulation")) + 
     theme_minimal()
-  figure_exposures[[6]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = noise, fill = when), alpha = 0.6) +
+  figureA8[[6]] <- ggplot() + geom_density(data = exposures_pre_post, aes(x = noise, fill = when), alpha = 0.6) +
     labs(x = "Noise (dB)", y = "Density", fill = "Scenario") + 
     scale_colour_brewer(type = "qual", palette = 6, aesthetics = "fill") + 
     theme_minimal()
   
-  return(figure_exposures)
+  return(figureA8)
 }
 
-tableS2 <- function(town_polygon_sf, all_sims, exposures_town) {
+get_tableA3 <- function(town_polygon_sf, all_sims, exposures_town) {
   
   # collapse max_income
   town_polygon_sf_2 <- town_polygon_sf %>%
@@ -1016,7 +1016,7 @@ tableS2 <- function(town_polygon_sf, all_sims, exposures_town) {
     mutate(when = "post")
   
   # bind rows
-  pollutants_prepost_tbl <- bind_rows(exposure_pre_summary, exposure_post_summary) %>% 
+  tableA3 <- bind_rows(exposure_pre_summary, exposure_post_summary) %>% 
     mutate(across(pm_mean:noise_q75, ~ round(.x, 2))) %>% 
     pivot_longer(cols = pm_mean:noise_q75) %>% 
     pivot_wider(names_from = when) %>% 
@@ -1027,10 +1027,10 @@ tableS2 <- function(town_polygon_sf, all_sims, exposures_town) {
     mutate(pre = paste0(pre_mean, " (", pre_q25, ", ", pre_q75, ")"), post = paste0(post_mean, " (", post_q25, ", ", post_q75, ")")) %>% 
     dplyr::select(exposure, pre, post)
     
-  return(pollutants_prepost_tbl)
+  return(tableA3)
 }
 
-tableS1 <- function(all_sims, town_polygon_sf) {
+get_tableA2 <- function(all_sims, town_polygon_sf) {
   
   # average population moved over all simulation runs
   sim_moved_avg <- all_sims %>%
@@ -1077,21 +1077,21 @@ tableS1 <- function(all_sims, town_polygon_sf) {
     left_join(D_multi_pre, by = "NAME") %>% 
     left_join(D_multi_post, by = "NAME")
     
-  # for Table S1
-  D_pre_post_tbl <- D_multi_sf %>% 
+  # for Table A2
+  tableA2 <- D_multi_sf %>% 
     st_drop_geometry() %>% 
     dplyr::select(NAME, D_multi_pre, D_multi_post) %>% 
     mutate(across(c(D_multi_pre, D_multi_post), ~ round(.x, 2)))
   
-  return(D_pre_post_tbl)
+  return(tableA2)
   
 }
 
-figureS7 <- function(tableS1) {
+get_figureA7 <- function(tableA2) {
   
   D_multi_sf <- get_acs(state = "CT", geography = "county", variables = "B01001_001", geometry = TRUE, year = 2019) %>%
     mutate(NAME = sub(pattern = " County, Connecticut", replacement = "", x = NAME)) %>% 
-    left_join(tableS1, by = "NAME")
+    left_join(tableA2, by = "NAME")
   
   D_pre <- ggplot() + geom_sf(data = D_multi_sf, aes(fill = D_multi_pre)) + scale_fill_viridis_c(option = "magma", direction = -1, limits = c(0, 0.6)) + labs(fill = "Multigroup D", title = "A. Index of dissimilarity in 2019") + theme_minimal() + theme(plot.title = element_text(size = 10))
   
@@ -1101,12 +1101,12 @@ figureS7 <- function(tableS1) {
   
   D_post <- ggplot() + geom_sf(data = D_multi_sf, aes(fill = D_multi_post)) + scale_fill_viridis_c(option = "magma", direction = -1, limits = c(0, 0.6)) + labs(fill = "Multigroup D", title = "B. Index of dissimilarity post-simulations") + theme_minimal() + theme(legend.position = "none") + theme(legend.position = "none") + theme(plot.title = element_text(size = 10))
   
-  D_pre_post_map <- grid.arrange(D_pre, D_post, legend_D_multi, nrow = 1, widths = c(3,3,1))
+  figureA7 <- grid.arrange(D_pre, D_post, legend_D_multi, nrow = 1, widths = c(3,3,1))
   
-  return(D_pre_post_map)
+  return(figureA7)
 }  
 
-figureS1 <- function(exposures_town) {
+get_figureA1 <- function(exposures_town) {
   
   # map 2019 annual mean PM2.5 by town
   pm_2019_map <- ggplot() + geom_sf(data = exposures_town, aes(fill = pm_mean)) + scale_fill_viridis_c(option = "magma", direction = -1) + labs(fill = "PM2.5 (μg/m3)") + theme_minimal()
@@ -1126,13 +1126,13 @@ figureS1 <- function(exposures_town) {
   # map 2019 annual mean noise by town
   noise_2019_map <- ggplot() + geom_sf(data = exposures_town, aes(fill = noise_mean)) + scale_fill_viridis_c(option = "magma", direction = -1) + labs(fill = "Noise (dB)") + theme_minimal()
   
-  figureS1 <- list(pm_2019_map, o3_2019_map, no2_2019_map, heat_2019_map, ndvi_2019_map, noise_2019_map)
+  figureA1 <- list(pm_2019_map, o3_2019_map, no2_2019_map, heat_2019_map, ndvi_2019_map, noise_2019_map)
   
-  return(figureS1)
+  return(figureA1)
   
 }
 
-figureS3_S6 <- function(all_sims, town_polygon_sf) {
+get_figureA3_A6 <- function(all_sims, town_polygon_sf) {
   
   # collapse max_income
   town_polygon_sf_2 <- town_polygon_sf %>%
@@ -1170,36 +1170,28 @@ figureS3_S6 <- function(all_sims, town_polygon_sf) {
   
   asian_post_map <- ggplot() + geom_sf(data = sim_moved_totals[sim_moved_totals$race_ethnicity == "asian",], aes(fill = pop_post)) + scale_fill_viridis_c(option = "magma", direction = -1, limits = c(0, asian_max)) + labs(fill = "Households") + theme_minimal() # + theme(legend.direction = "horizontal", legend.position = "bottom")
   
-  # asian_pre_post_map <- grid.arrange(asian_pre_map, asian_post_map, nrow = 2)
-  
   # Non-Hispanic Black households
   black_nh_pre_map <- ggplot() + geom_sf(data = town_polygon_sf_2[town_polygon_sf_2$race_ethnicity == "black_nh",], aes(fill = pop_pre)) + scale_fill_viridis_c(option = "magma", direction = -1, limits = c(0, black_nh_max)) + labs(fill = "Households") + theme_minimal()
   
   black_nh_post_map <- ggplot() + geom_sf(data = sim_moved_totals[sim_moved_totals$race_ethnicity == "black_nh",], aes(fill = pop_post)) + scale_fill_viridis_c(option = "magma", direction = -1, limits = c(0, black_nh_max)) + labs(fill = "Households") + theme_minimal()
-  
-  # black_nh_pre_post_map <- grid.arrange(black_nh_pre_map, black_nh_post_map, nrow = 1)
   
   # Hispanic/Latino households
   hispanic_pre_map <- ggplot() + geom_sf(data = town_polygon_sf_2[town_polygon_sf_2$race_ethnicity == "hispanic",], aes(fill = pop_pre)) + scale_fill_viridis_c(option = "magma", direction = -1, limits = c(0, hispanic_max)) + labs(fill = "Households") + theme_minimal()
   
   hispanic_post_map <- ggplot() + geom_sf(data = sim_moved_totals[sim_moved_totals$race_ethnicity == "hispanic",], aes(fill = pop_post)) + scale_fill_viridis_c(option = "magma", direction = -1, limits = c(0, hispanic_max)) + labs(fill = "Households") + theme_minimal()
   
-  # hispanic_pre_post_map <- grid.arrange(hispanic_pre_map, hispanic_post_map, nrow = 1)
-  
   # Non-Hispanic White households
   white_nh_pre_map <- ggplot() + geom_sf(data = town_polygon_sf_2[town_polygon_sf_2$race_ethnicity == "white_nh",], aes(fill = pop_pre)) + scale_fill_viridis_c(option = "magma", direction = -1, limits = c(0, white_nh_max)) + labs(fill = "Households") + theme_minimal()
   
   white_nh_post_map <- ggplot() + geom_sf(data = sim_moved_totals[sim_moved_totals$race_ethnicity == "white_nh",], aes(fill = pop_post)) + scale_fill_viridis_c(option = "magma", direction = -1, limits = c(0, white_nh_max)) + labs(fill = "Households") + theme_minimal()
   
-  # white_nh_pre_post_map <- grid.arrange(white_nh_pre_map, white_nh_post_map, nrow = 1)
+  figureA3_A6 <- list(asian_pre_map, asian_post_map, black_nh_pre_map, black_nh_post_map, hispanic_pre_map, hispanic_post_map, white_nh_pre_map, white_nh_post_map)
   
-  figureS3_S6 <- list(asian_pre_map, asian_post_map, black_nh_pre_map, black_nh_post_map, hispanic_pre_map, hispanic_post_map, white_nh_pre_map, white_nh_post_map)
-  
-  return(figureS3_S6)
+  return(figureA3_A6)
   
 }
 
-sim_moved_totals_2 <- function(all_sims, town_polygon_sf) {
+get_sim_moved_totals_2 <- function(all_sims, town_polygon_sf) {
   
   # collapse max_income
   town_polygon_sf_2 <- town_polygon_sf %>%
@@ -1239,47 +1231,47 @@ sim_moved_totals_2 <- function(all_sims, town_polygon_sf) {
   
 }
 
-exhibit1 <- function(sim_moved_totals_2) {
+get_figure2A <- function(sim_moved_totals_2) {
   
-  exhibit1 <- ggplot() + geom_sf(data = sim_moved_totals_2, aes(fill = cat_pre)) + scale_colour_brewer(limits = c("<5,500", "5,500-10,999", "11,000-16,499", "16,500-21,999", "22,000-27,499", "27,500-32,999"), 
+  figure2A <- ggplot() + geom_sf(data = sim_moved_totals_2, aes(fill = cat_pre)) + scale_colour_brewer(limits = c("<5,500", "5,500-10,999", "11,000-16,499", "16,500-21,999", "22,000-27,499", "27,500-32,999"), 
     type = "seq", palette = "YlOrBr", aesthetics = "fill") + labs(fill = "Households", tag = "A.") + theme_minimal() + theme(plot.subtitle = element_text(size = 8))
   
-  return(exhibit1)
+  return(figure2A)
   
 }
 
-exhibit1_data <- function(sim_moved_totals_2) {
+get_figure2A_data <- function(sim_moved_totals_2) {
   
   # spreadsheet for plotting data
-  exhibit1_data <- sim_moved_totals_2 %>% 
+  figure2A_data <- sim_moved_totals_2 %>% 
     dplyr::select(GEOID, NAME, `Households`= pop_pre, `Range` = cat_pre) %>% 
     st_drop_geometry()
   
-  return(exhibit1_data)
+  return(figure2A_data)
   
 }
 
-exhibit2 <- function(sim_moved_totals_2) {
+get_figure2B <- function(sim_moved_totals_2) {
   
-  exhibit2 <- ggplot() + geom_sf(data = sim_moved_totals_2, aes(fill = cat_post)) + scale_colour_brewer(limits = c("<5,500", "5,500-10,999", "11,000-16,499", "16,500-21,999", "22,000-27,499", "27,500-32,999"), 
+  figure2B <- ggplot() + geom_sf(data = sim_moved_totals_2, aes(fill = cat_post)) + scale_colour_brewer(limits = c("<5,500", "5,500-10,999", "11,000-16,499", "16,500-21,999", "22,000-27,499", "27,500-32,999"), 
     type = "seq", palette = "YlOrBr", aesthetics = "fill") + labs(fill = "Households", tag = "B.") + theme_minimal() + theme(plot.subtitle = element_text(size = 8))
   
-  return(exhibit2)
+  return(figure2B)
   
 }
 
-exhibit2_data <- function(sim_moved_totals_2) {
+get_figure2B_data <- function(sim_moved_totals_2) {
   
   # spreadsheet for plotting data
-  exhibit2_data <- sim_moved_totals_2 %>% 
+  figure2B_data <- sim_moved_totals_2 %>% 
     dplyr::select(GEOID, NAME, `Households` = pop_post, `Range` = cat_post) %>% 
     st_drop_geometry()
   
-  return(exhibit2_data)
+  return(figure2B_data)
   
 }
 
-figureS2 <- function(town_polygon_sf) {
+get_figureA2 <- function(town_polygon_sf) {
   
   # collapse max_income
   town_polygon_sf_2 <- town_polygon_sf %>%
@@ -1293,9 +1285,9 @@ figureS2 <- function(town_polygon_sf) {
   # map 8-30g exemptions by town
   exemptions_town <- ggplot() + geom_sf(data = town_polygon_sf_2, aes(fill = at_least_10)) + labs(fill = "At Least 10%?") + scale_colour_brewer(type = "div", aesthetics = "fill", palette = "Set2", direction = -1) + theme_minimal()
   
-  figureS2 <- list(percent_affordable, exemptions_town)
+  figureA2 <- list(percent_affordable, exemptions_town)
   
-  return(figureS2)
+  return(figureA2)
   
 }
 
@@ -1593,17 +1585,17 @@ simulate_cf_drive <- function(low_income_pop, housing_town, weights, AMI_limits,
   return(all_sims_drive)
 }
 
-exhibit_incomelimits <- function(CT_townships, AMI_limits) {
+get_figureA9 <- function(CT_townships, AMI_limits) {
   
   limits_sf <- CT_townships %>% 
     left_join(AMI_limits, by = "NAME") %>% 
     mutate(limit = factor(limit))
   
-  exhibit_incomelimits <- ggplot() + geom_sf(data = limits_sf, aes(fill = limit)) + theme_minimal() +
+  figureA9 <- ggplot() + geom_sf(data = limits_sf, aes(fill = limit)) + theme_minimal() +
     labs(fill = "HMFA Low-Income Limit") + scale_colour_brewer(type = "div", 
     aesthetics = "fill", palette = "Set2", direction = -1)
   
-  return(exhibit_incomelimits)
+  return(figureA9)
 }
 
 get_number_AMI_restricted <- function(low_income_pop, AMI_limits) {
@@ -1624,7 +1616,7 @@ get_number_AMI_restricted <- function(low_income_pop, AMI_limits) {
   return(number_AMI_restricted)
 }
 
-car_usage_pre_post <- function(sim_moved_totals_2) {
+get_car_usage_pre_post <- function(sim_moved_totals_2) {
   
   # get car commute prevalence by town in 2019
   car_town <- get_acs(geography = "county subdivision", state = "CT", variables = c("B08006_001", "B08006_002"), 
@@ -1645,132 +1637,205 @@ car_usage_pre_post <- function(sim_moved_totals_2) {
   
   return(car_usage_pre_post)
 }
+
+get_tableA1 <- function(all_sims, town_polygon_sf) {
   
-save_exhibits <- function(exhibit1, 
-                          exhibit2, 
-                          exhibit1_data, 
-                          exhibit2_data, 
-                          exhibit3, 
-                          exhibit4, 
-                          figureS1, 
-                          figureS2, 
-                          figureS3_S6, 
-                          tableS1, 
-                          figureS7, 
-                          tableS2, 
-                          exhibitA12, 
-                          exhibitA13, 
+  # get migration flows from 2019 ACS 5-year estimates
+  flows <- get_flows(geography = "county", state = "CT", year = 2019) %>% 
+    mutate(county = sub(pattern = ".*town, ", replacement = "", x = FULL1_NAME)) %>% 
+    mutate(county = sub(pattern = " County, Connecticut", replacement = "", x = FULL1_NAME)) %>% 
+    # exclude moves from or to locations outside CT
+    filter(str_detect(FULL2_NAME, "Connecticut"))
+
+  # summarize movement into each county - Census
+  flows_in <- flows %>% 
+    filter(variable == "MOVEDIN") %>% 
+    group_by(county) %>% 
+    summarize(moved_in_acs = sum(estimate))
+  
+  # summarize movement out of each county - Census
+  flows_out <- flows %>% 
+    filter(variable == "MOVEDOUT") %>% 
+    group_by(county) %>% 
+    summarize(moved_out_acs = sum(estimate))
+  
+  # summarize movement into each county - simulated
+  simulated_in <- all_sims %>% 
+    unlist() %>% 
+    .[702:870,] %>% 
+    rowMeans()
+  
+  # summarize movement out of each county - simulated
+  simulated_out <- all_sims %>% 
+    unlist() %>% 
+    .[871:1039,] %>% 
+    rowMeans()
+  
+  # get total state population
+  state_pop <- get_acs(geography = "state", state = "CT", variable = "B01003_001", year = 2019) %>% 
+    pull(estimate)
+  
+  # get total low income households in simulation at baseline
+  sim_households <- town_polygon_sf %>% 
+    pull(pop_pre) %>% 
+    sum()
+
+  pop_town_county <- get_acs(geography = "county subdivision", state = "CT", variable = "B01003_001", year = 2019) %>% 
+    # exclude non-towns
+    filter(!str_detect(NAME, "County subdivisions not defined")) %>%
+    # extract county names
+    mutate(county = sub(pattern = ".*town, ", replacement = "", x = NAME), .after = NAME) %>% 
+    mutate(county = sub(pattern = " County, Connecticut", replacement = "", x = county)) %>% 
+    mutate(NAME = sub(pattern = regex(" town.+"), replacement = "", x = NAME)) %>% 
+    # arrange town names alphabetically to merge with simulated averages
+    arrange(NAME) %>%
+    # merge simulated averages, moved in and moved out by town
+    mutate(simulated_in = simulated_in, simulated_out = simulated_out) %>% 
+    # summarize simulated movement by county
+    group_by(county) %>% 
+    summarize(sim_in = sum(simulated_in), sim_out = sum(simulated_out)) %>% 
+    left_join(flows_in, by = "county") %>% 
+    left_join(flows_out, by = "county") %>% 
+    mutate(sim_in_pct = sim_in/sim_households*100, sim_out_pct = sim_out/sim_households*100) %>% 
+    mutate(moved_in_acs_pct = moved_in_acs/state_pop*100, moved_out_acs_pct = moved_out_acs/state_pop*100)
+  
+  tableA1 <- pop_town_county %>% 
+    dplyr::select(county, moved_out_acs_pct, sim_out_pct, moved_in_acs_pct, sim_in_pct) %>% 
+    mutate(across(.cols = moved_out_acs_pct:sim_in_pct, ~ paste0(round(.x, 2), "%")))
+  
+  return(tableA1)
+  
+}
+  
+save_exhibits <- function(figure2A, 
+                          figure2B, 
+                          figure2A_data, 
+                          figure2B_data, 
+                          table1, 
+                          table2, 
+                          figureA1, 
+                          figureA2, 
+                          figureA3_A6,
+                          tableA1,
+                          tableA2, 
+                          figureA7,
+                          figureA8,
+                          tableA3, 
+                          tableA4,
+                          tableA5, 
+                          tableA6,
+                          figureA9,
                           avg_moved, 
                           avg_moved_s1, 
-                          avg_moved_18, 
-                          exhibitA14, 
                           avg_moved_drive, 
-                          exhibit_incomelimits,
-                          figure_exposures,
-                          number_AMI_restricted,
-                          car_usage_pre_post) {
+                          avg_moved_18, 
+                          car_usage_pre_post,
+                          number_AMI_restricted) {
   
   if(!dir.exists(here("output"))){dir.create(here("output"))}
   
-  # exhibit 1 and 2 - map of population, pre/post-simulation and underlying data
-  ## exhibit 1
-  ggsave(plot = exhibit1, here("output", "exhibit1.pdf"), width = 4.5, height = 3, units = "in")
-  write.csv(exhibit1_data, here("output", "exhibit1_data.csv"))
+  # Figure 2A and 2B - map of population, pre/post-simulation and underlying data
+  ## Figure 2A
+  ggsave(plot = figure2A, here("output", "figure2A.pdf"), width = 4.5, height = 3, units = "in")
+  write.csv(figure2A_data, here("output", "figure2A_data.csv"))
   
-  ## exhibit 2
-  ggsave(plot = exhibit2, here("output", "exhibit2.pdf"), width = 4.5, height = 3, units = "in")
-  write.csv(exhibit2_data, here("output", "exhibit2_data.csv"))
+  ## Figure 2B
+  ggsave(plot = figure2B, here("output", "figure2B.pdf"), width = 4.5, height = 3, units = "in")
+  write.csv(figure2B_data, here("output", "figure2B_data.csv"))
   
-  ## exhibit 1 and 2, combined
-  exhibit1_nolegend <- exhibit1 + theme(legend.position = "none")
-  exhibit2_nolegend <- exhibit2 + theme(legend.position = "none")
-  legend <- as_ggplot(get_legend(exhibit1))
+  ## Figure 2A and 2B, combined
+  figure2A_nolegend <- figure2A + theme(legend.position = "none")
+  figure2B_nolegend <- figure2B + theme(legend.position = "none")
+  legend <- as_ggplot(get_legend(figure2A))
   
-  exhibit1_2 <- grid.arrange(exhibit1_nolegend, exhibit2_nolegend, legend, nrow = 1, widths = c(3,3,1))
-  ggsave(plot = exhibit1_2, here("output", "exhibit1_2.pdf"), width = 10, height = 3, units = "in")
+  figure2 <- grid.arrange(figure2A_nolegend, figure2B_nolegend, legend, nrow = 1, widths = c(3,3,1))
+  ggsave(plot = figure2, here("output", "figure2.pdf"), width = 10, height = 3, units = "in")
   
-  # exhibit 3 - deaths averted
-  write.csv(exhibit3, file = here("output", "exhibit3.csv"))
+  # Table 1 - deaths averted
+  write.csv(table1, file = here("output", "table1.csv"))
   
-  # exhibit 4 - rates of deaths averted
-  write.csv(exhibit4, here("output", "exhibit4.csv"))
+  # Table 2 - rates of deaths averted
+  write.csv(table2, here("output", "table2.csv"))
   
-  # exhibits A1a-f - map of baseline exposures by town
-  ggsave(figureS1[[1]], filename = here("output", "exhibitA1a.png"), width = 4.5, height = 3, units = "in")
-  ggsave(figureS1[[2]], filename = here("output", "exhibitA1b.png"), width = 4.5, height = 3, units = "in")
-  ggsave(figureS1[[3]], filename = here("output", "exhibitA1c.png"), width = 4.5, height = 3, units = "in")
-  ggsave(figureS1[[4]], filename = here("output", "exhibitA1d.png"), width = 4.5, height = 3, units = "in")
-  ggsave(figureS1[[5]], filename = here("output", "exhibitA1e.png"), width = 4.5, height = 3, units = "in")
-  ggsave(figureS1[[6]], filename = here("output", "exhibitA1f.png"), width = 4.5, height = 3, units = "in")
+  # Figures A1a-f - map of baseline exposures by town
+  ggsave(figureA1[[1]], filename = here("output", "figureA1a.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figureA1[[2]], filename = here("output", "figureA1b.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figureA1[[3]], filename = here("output", "figureA1c.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figureA1[[4]], filename = here("output", "figureA1d.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figureA1[[5]], filename = here("output", "figureA1e.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figureA1[[6]], filename = here("output", "figureA1f.png"), width = 4.5, height = 3, units = "in")
   
-  # exhibit A2a-b - baseline percent affordable and >= 10% by town
-  ggsave(figureS2[[1]], filename = here("output", "exhibitA2a.png"), width = 4.5, height = 3, units = "in")
-  ggsave(figureS2[[2]], filename = here("output", "exhibitA2b.png"), width = 4.5, height = 3, units = "in")
+  # Figures A2a-b - baseline percent affordable and >= 10% by town
+  ggsave(figureA2[[1]], filename = here("output", "figureA2a.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figureA2[[2]], filename = here("output", "figureA2b.png"), width = 4.5, height = 3, units = "in")
   
-  # exhibit A3 and exhibit A4 are text
+  # Figures A3a-b - map of Asian low-income households, pre/post-simulation
+  ggsave(figureA3_A6[[1]], filename = here("output", "figureA3a.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figureA3_A6[[2]], filename = here("output", "figureA3b.png"), width = 4.5, height = 3, units = "in")
   
-  # exhibit A5a-b - map of Asian low-income households, pre/post-simulation
-  ggsave(figureS3_S6[[1]], filename = here("output", "exhibitA5a.png"), width = 4.5, height = 3, units = "in")
-  ggsave(figureS3_S6[[2]], filename = here("output", "exhibitA5b.png"), width = 4.5, height = 3, units = "in")
+  # Figures A4a-b - map of non-Hispanic Black low-income households, pre/post-simulation
+  ggsave(figureA3_A6[[3]], filename = here("output", "figureA4a.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figureA3_A6[[4]], filename = here("output", "figureA4b.png"), width = 4.5, height = 3, units = "in")
   
-  # exhibit A6 - map of non-Hispanic Black low-income households, pre/post-simulation
-  ggsave(figureS3_S6[[3]], filename = here("output", "exhibitA6a.png"), width = 4.5, height = 3, units = "in")
-  ggsave(figureS3_S6[[4]], filename = here("output", "exhibitA6b.png"), width = 4.5, height = 3, units = "in")
+  # Figures A5a-b - map of Latino low-income households, pre/post-simulation
+  ggsave(figureA3_A6[[5]], filename = here("output", "figureA5a.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figureA3_A6[[6]], filename = here("output", "figureA5b.png"), width = 4.5, height = 3, units = "in")
   
-  # exhibit A7 - map of Latino low-income households, pre/post-simulation
-  ggsave(figureS3_S6[[5]], filename = here("output", "exhibitA7a.png"), width = 4.5, height = 3, units = "in")
-  ggsave(figureS3_S6[[6]], filename = here("output", "exhibitA7b.png"), width = 4.5, height = 3, units = "in")
+  # Figures A6a-b - map of non-Hispanic White low-income households, pre/post-simulation
+  ggsave(figureA3_A6[[7]], filename = here("output", "figureA6a.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figureA3_A6[[8]], filename = here("output", "figureA6b.png"), width = 4.5, height = 3, units = "in")
   
-  # exhibit A8 - map of non-Hispanic White low-income households, pre/post-simulation
-  ggsave(figureS3_S6[[7]], filename = here("output", "exhibitA8a.png"), width = 4.5, height = 3, units = "in")
-  ggsave(figureS3_S6[[8]], filename = here("output", "exhibitA8b.png"), width = 4.5, height = 3, units = "in")
+  # Table A1 - migration flows and simulated movement
+  write.csv(tableA1, here("output", "tableA1.csv"))
   
-  # exhibit A9 - dissimilarity index by county, pre/post table
-  write.csv(tableS1, here("output", "exhibitA9.csv"))
+  # Table A2 - dissimilarity index by county, pre/post table
+  write.csv(tableA2, here("output", "tableA2.csv"))
   
-  # exhibit A10 - dissimilarity index by county, pre/post map
-  ggsave(figureS7, filename = here("output", "exhibitA10.png"), width = 10, height = 3, units = "in")
+  # Figure A7 - dissimilarity index by county, pre/post map
+  ggsave(figureA7, filename = here("output", "figureA7.png"), width = 10, height = 3, units = "in")
   
-  # exhibit ? - exposures pre/post figure
-  ggsave(figure_exposures[[1]], filename = here("output", "exhibit_exposures_a.png"), width = 4.5, height = 3, units = "in")
-  ggsave(figure_exposures[[2]], filename = here("output", "exhibit_exposures_b.png"), width = 4.5, height = 3, units = "in")
-  ggsave(figure_exposures[[3]], filename = here("output", "exhibit_exposures_c.png"), width = 4.5, height = 3, units = "in")
-  ggsave(figure_exposures[[4]], filename = here("output", "exhibit_exposures_d.png"), width = 4.5, height = 3, units = "in")
-  ggsave(figure_exposures[[5]], filename = here("output", "exhibit_exposures_e.png"), width = 4.5, height = 3, units = "in")
-  ggsave(figure_exposures[[6]], filename = here("output", "exhibit_exposures_f.png"), width = 4.5, height = 3, units = "in")
+  # Figure A8a-f - exposures pre/post figure
+  ggsave(figureA8[[1]], filename = here("output", "figureA8a.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figureA8[[2]], filename = here("output", "figureA8b.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figureA8[[3]], filename = here("output", "figureA8c.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figureA8[[4]], filename = here("output", "figureA8d.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figureA8[[5]], filename = here("output", "figureA8e.png"), width = 4.5, height = 3, units = "in")
+  ggsave(figureA8[[6]], filename = here("output", "figureA8f.png"), width = 4.5, height = 3, units = "in")
   
-  # exhibit A11 - exposures pre/post table
-  write.csv(tableS2, here("output", "exhibitA11.csv"))
+  # Table A3 - exposures pre/post table
+  write.csv(tableA3, here("output", "tableA3.csv"))
   
-  # exhibit A12 - sensitivity analysis, no inverse distance weighting penalty
-  write.csv(exhibitA12, here("output", "exhibitA12.csv"))
+  # Table A4 - sensitivity analysis, no inverse distance weighting penalty
+  write.csv(tableA4, here("output", "tableA4.csv"))
   
-  # exhibit A13 - sensitivity analysis, using 2018 data
-  write.csv(exhibitA13, here("output", "exhibitA13.csv"))
+  # Table A5 - sensitivity analysis, using drive time buffers
+  write.csv(tableA5, here("output", "tableA5.csv"))
   
-  # exhibit A14 - sensitivity analysis, using drive time buffers
-  write.csv(exhibitA14, here("output", "exhibitA14.csv"))
+  # Table A6 - sensitivity analysis, using 2018 data
+  write.csv(tableA6, here("output", "tableA6.csv"))
   
-  # exhibit A16 - HMFA income limits 2019 map
-  ggsave(exhibit_incomelimits, filename = here("output", "exhibitA16.png"), width = 4.5, height = 3, units = "in")
+  # Figure A9 - HMFA income limits 2019 map
+  ggsave(figureA9, filename = here("output", "figureA9.png"), width = 6.5, height = 3, units = "in")
   
-  # average moved - main analysis
+  # additional descriptive statistics
+  ## average number/proportion of households moved to different town - main analysis
   write.csv(avg_moved, here("output", "avg_moved.csv"))
   
-  # number AMI restricted
-  # write.csv(number_AMI_restricted, here("output", "number_AMI_restricted.csv"))
-  
-  # car usage
-  write.csv(car_usage_pre_post, here("output", "car_usage_pre_post.csv"))
-  
-  # average moved - sensitivity analysis 1
+  ## average number/proportion of households moved to different town - sensitivity analysis 1
   write.csv(avg_moved_s1, here("output", "avg_moved_s1.csv"))
   
-  # average moved - sensitivity analysis 2
-  write.csv(avg_moved_18, here("output", "avg_moved_s2.csv"))
-  
-  # average moved - sensitivity analysis 3
+  ## average number/proportion of households moved to different town - sensitivity analysis 2
   write.csv(avg_moved_drive, here("output", "avg_moved_drive.csv"))
+  
+  ## average number/proportion of households moved to different town - sensitivity analysis 3
+  write.csv(avg_moved_18, here("output", "avg_moved_18.csv"))
+  
+  ## median town-level population proportion using car travel for work commute
+  write.csv(car_usage_pre_post, here("output", "car_usage_pre_post.csv"))
+  
+  ## number/proportion of baseline 2019 households restricted from moving to HMFA with income limit below their bracket
+  write.csv(number_AMI_restricted, here("output", "number_AMI_restricted.csv"))
+  
 }
 
 

@@ -2,9 +2,10 @@
 library(targets)
 library(tarchetypes)
 library(future)
-library(crew)
 
 source("Functions.R")
+
+plan(multisession, workers = availableCores() - 1)
 
 options(tigris_use_cache = TRUE)
 
@@ -17,9 +18,6 @@ hud_key <- ""
 
 # optional - replace 10 with desired number of simulation repeats (1,000 for full simulation)
 n <- 10
-
-# optional - replace 1 with desired number of parallel workers (if greater than availableCores()-1, will default to availableCores()-1)
-max_workers <- 1
 
 # optional - set to TRUE if you would like to skip sensitivity analyses
 options(SKIP_SUPPL_ANALYSIS = FALSE)
@@ -52,9 +50,7 @@ tar_option_set(
     "osrm"
   ),
   format = 'rds', 
-  workspace_on_error = TRUE,
-  controller = crew_controller_local(workers = min(availableCores(constraints = "connections", omit = 1), max_workers))
-)
+  workspace_on_error = TRUE)
 
 list(
   tar_target(install_census_key, {
@@ -119,58 +115,61 @@ list(
   }),
   # Tables and Figures
   tar_target(sim_moved_totals_2, {
-    sim_moved_totals_2(all_sims = all_sims, town_polygon_sf = town_polygon_sf)
+    get_sim_moved_totals_2(all_sims = all_sims, town_polygon_sf = town_polygon_sf)
   }),
-  tar_target(exhibit1, {
-    exhibit1(sim_moved_totals_2 = sim_moved_totals_2)
+  tar_target(figure2A, {
+    get_figure2A(sim_moved_totals_2 = sim_moved_totals_2)
   }),
-  tar_target(exhibit1_data, {
-    exhibit1_data(sim_moved_totals_2 = sim_moved_totals_2)
+  tar_target(figure2A_data, {
+    get_figure2A_data(sim_moved_totals_2 = sim_moved_totals_2)
   }),
-  tar_target(exhibit2, {
-    exhibit2(sim_moved_totals_2 = sim_moved_totals_2)
+  tar_target(figure2B, {
+    get_figure2B(sim_moved_totals_2 = sim_moved_totals_2)
   }),
-  tar_target(exhibit2_data, {
-    exhibit2_data(sim_moved_totals_2 = sim_moved_totals_2)
+  tar_target(figure2B_data, {
+    get_figure2B_data(sim_moved_totals_2 = sim_moved_totals_2)
   }),
-  tar_target(exhibit3, {
-    exhibit3(all_sims = all_sims)
+  tar_target(table1, {
+    get_table1(all_sims = all_sims)
   }),
   tar_target(avg_moved, {
     get_avg_moved(all_sims = all_sims, town_polygon_sf = town_polygon_sf)
   }),
-  tar_target(exhibit4, {
-    exhibit4(town_polygon_sf = town_polygon_sf, all_sims = all_sims)
+  tar_target(table2, {
+    get_table2(town_polygon_sf = town_polygon_sf, all_sims = all_sims)
   }),
-  tar_target(tableS1, {
-    tableS1(all_sims = all_sims, town_polygon_sf = town_polygon_sf)
+  tar_target(tableA2, {
+    get_tableA2(all_sims = all_sims, town_polygon_sf = town_polygon_sf)
   }),
-  tar_target(figure_exposures, {
-    figure_exposures(town_polygon_sf = town_polygon_sf, all_sims = all_sims, exposures_town = exposures_town)
+  tar_target(figureA8, {
+    get_figureA8(town_polygon_sf = town_polygon_sf, all_sims = all_sims, exposures_town = exposures_town)
   }),
-  tar_target(tableS2, {
-    tableS2(town_polygon_sf = town_polygon_sf, all_sims = all_sims, exposures_town = exposures_town)
+  tar_target(tableA3, {
+    get_tableA3(town_polygon_sf = town_polygon_sf, all_sims = all_sims, exposures_town = exposures_town)
   }),
-  tar_target(figureS1, {
-    figureS1(exposures_town = exposures_town)
+  tar_target(figureA1, {
+    get_figureA1(exposures_town = exposures_town)
   }),
-  tar_target(figureS2, {
-    figureS2(town_polygon_sf = town_polygon_sf)
+  tar_target(figureA2, {
+    get_figureA2(town_polygon_sf = town_polygon_sf)
   }),
-  tar_target(figureS3_S6, {
-    figureS3_S6(all_sims = all_sims, town_polygon_sf = town_polygon_sf)
+  tar_target(figureA3_A6, {
+    get_figureA3_A6(all_sims = all_sims, town_polygon_sf = town_polygon_sf)
   }),
-  tar_target(figureS7, {
-    figureS7(tableS1 = tableS1)
+  tar_target(figureA7, {
+    get_figureA7(tableA2 = tableA2)
   }),
-  tar_target(exhibit_incomelimits, {
-    exhibit_incomelimits(CT_townships = CT_townships, AMI_limits = AMI_limits)
+  tar_target(figureA9, {
+    get_figureA9(CT_townships = CT_townships, AMI_limits = AMI_limits)
   }),
   tar_target(number_AMI_restricted, {
     get_number_AMI_restricted(low_income_pop = low_income_pop, AMI_limits = AMI_limits)
   }),
   tar_target(car_usage_pre_post, {
-    car_usage_pre_post(sim_moved_totals_2 = sim_moved_totals_2)
+    get_car_usage_pre_post(sim_moved_totals_2 = sim_moved_totals_2)
+  }),
+  tar_target(tableA1, {
+    get_tableA1(all_sims = all_sims, town_polygon_sf = town_polygon_sf)
   }),
   # Sensitivity Analysis 1
   tar_target(all_sims_s1, {
@@ -183,33 +182,16 @@ list(
                    post_heat_1 = post_heat_1, 
                    CT_townships = CT_townships, 
                    n = n)
-    }),
-  tar_target(exhibitA12, {
+  }),
+  tar_target(tableA4, {
     if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
-    exhibit3(all_sims = all_sims_s1)
-    }),
+    get_table1(all_sims = all_sims_s1)
+  }),
   tar_target(avg_moved_s1, {
     if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
     get_avg_moved(all_sims = all_sims_s1, town_polygon_sf = town_polygon_sf)
-    }),
+  }),
   # Sensitivity Analysis 2
-  tar_target(exposures_town_18, {
-    if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
-    get_exposures_town(year = "2018", CT_townships = CT_townships, downloads = downloads)
-    }),
-  tar_target(all_sims_18, {
-    if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
-    simulate_cf_18(exposures_town_18 = exposures_town_18, CT_townships = CT_townships, downloads = downloads, n = n)
-    }),
-  tar_target(exhibitA13, {
-    if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
-    exhibit3(all_sims = all_sims_18)
-    }),
-  tar_target(avg_moved_18, {
-    if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
-    get_avg_moved(all_sims = all_sims_18, town_polygon_sf = town_polygon_sf)
-    }),
-  # Sensitivity Analysis 3
   tar_target(weights_drive, {
     if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
     get_weights_drive(CT_townships = CT_townships)
@@ -224,39 +206,57 @@ list(
                       post_heat_1 = post_heat_1,
                       n = n)
   }),
-  tar_target(exhibitA14, {
+  tar_target(tableA5, {
     if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
-    exhibit3(all_sims = all_sims_drive)
+    get_table1(all_sims = all_sims_drive)
   }),
   tar_target(avg_moved_drive, {
     if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
     get_avg_moved(all_sims = all_sims_drive, town_polygon_sf = town_polygon_sf)
   }),
+  # Sensitivity Analysis 3
+  tar_target(exposures_town_18, {
+    if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
+    get_exposures_town(year = "2018", CT_townships = CT_townships, downloads = downloads)
+  }),
+  tar_target(all_sims_18, {
+    if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
+    simulate_cf_18(exposures_town_18 = exposures_town_18, CT_townships = CT_townships, downloads = downloads, n = n)
+  }),
+  tar_target(tableA6, {
+    if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
+    get_table1(all_sims = all_sims_18)
+  }),
+  tar_target(avg_moved_18, {
+    if (isTRUE(getOption("SKIP_SUPPL_ANALYSIS"))) return(NULL)
+    get_avg_moved(all_sims = all_sims_18, town_polygon_sf = town_polygon_sf)
+  }),
   # Save results
-  tar_target(save_exhibits, {
-    save_exhibits(exhibit1 = exhibit1,
-                  exhibit1_data = exhibit1_data,
-                  exhibit2 = exhibit2,
-                  exhibit2_data = exhibit2_data,
-                  exhibit3 = exhibit3,
-                  exhibit4 = exhibit4,
-                  figureS1 = figureS1,
-                  figureS2 = figureS2,
-                  figureS3_S6 = figureS3_S6,
-                  tableS1 = tableS1,
-                  figureS7 = figureS7,
-                  tableS2 = tableS2,
-                  exhibitA12 = exhibitA12,
-                  exhibitA13 = exhibitA13,
-                  exhibitA14 = exhibitA14,
+  tar_target(save_exhibits_all, {
+    save_exhibits(figure2A = figure2A,
+                  figure2A_data = figure2A_data,
+                  figure2B = figure2B,
+                  figure2B_data = figure2B_data,
+                  table1 = table1,
+                  table2 = table2,
+                  figureA1 = figureA1,
+                  figureA2 = figureA2,
+                  figureA3_A6 = figureA3_A6,
+                  tableA1 = tableA1,
+                  tableA2 = tableA2,
+                  figureA7 = figureA7,
+                  figureA8 = figureA8,
+                  tableA3 = tableA3,
+                  tableA4 = tableA4,
+                  tableA5 = tableA5,
+                  tableA6 = tableA6,
+                  figureA9 = figureA9,
                   avg_moved = avg_moved,
                   avg_moved_s1 = avg_moved_s1,
                   avg_moved_18 = avg_moved_18,
                   avg_moved_drive = avg_moved_drive,
-                  exhibit_incomelimits = exhibit_incomelimits,
-                  figure_exposures = figure_exposures,
-                  number_AMI_restricted = number_AMI_restricted,
-                  car_usage_pre_post = car_usage_pre_post)
+                  car_usage_pre_post = car_usage_pre_post,
+                  number_AMI_restricted = number_AMI_restricted)
   })
 )
 

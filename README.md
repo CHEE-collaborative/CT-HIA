@@ -2,7 +2,7 @@
 This repository holds the data processing, simulation, and analysis code for the research project, "Simulating desegregation through affordable housing development: an environmental health impact assessment of Connecticut zoning law" by Saira Prasanth, Nire Oloyede, Xuezhixing Zhang, Kai Chen, and Daniel Carrión, 2024. A preprint is available through medRxiv here: https://doi.org/10.1101/2024.02.13.24302645
 
 ## Installation and Data Downloads
-First, install R version 4.3.2. R is available for free download from the R Project for Statistical Computing here: https://www.r-project.org/
+First, install R version 4.2.0. R is available for free download from the R Project for Statistical Computing here: https://www.r-project.org/
 
 Then, download a copy of the repository to your device and open the project, "CT HIA.Rproj", in R or R Studio. The `renv` package will be installed, if it is not currently installed on your device. To load package versions identical to those used in this analysis (as recorded in the lockfile, "renv.lock"), run `renv::restore()`. This will only change versions of packages loaded within this project, and package versions for any other projects will remain unchanged.
 
@@ -45,27 +45,28 @@ The remaining datasets used in this analysis are stored in this repository in th
 In aggregate, after all datasets have been downloaded to the "data" folder, the size of this folder will be approximately 7.67 GB.
 
 ## Running the Analysis
-Open the `_targets.R` and `Functions.R` scripts. Then, in the R console, run the following lines (also located at the beginning of `_targets.R`) to load the packages required to define the targets pipeline and to execute the pipeline:
+Open the `_targets.R` and `Functions.R` scripts. Then, paste your Census API key between the quotation marks in line 14, as indicated on the script. Likewise, paste your HUD API key between the quotation marks in line 17, as indicated on the script. Optionally, you may also replace `n <- 10` in line 20 and instead assign any other integer number greater than 1 to n, to change the number of simulation repeats. You may also optionally replace `options(SKIP_SUPPL_ANALYSIS = FALSE)` with `options(SKIP_SUPPL_ANALYSIS = TRUE)` in line 23 to run only the main analysis and skip all supplemental analyses.
+
+Then, in the R console, run the following lines (also located at the beginning of `_targets.R`) to load the packages required to define the targets pipeline and to execute the pipeline:
 ```
 library(targets)
 library(tarchetypes)
 library(future)
-library(crew)
 tar_make()
 ```
 You can cancel the execution at any point by pressing the escape key.
 
-The results shared in the corresponding publication are based on 1,000 repeats of the simulation. The number of repeats is determined by the value of `n` in line 18 of `_targets.R` and is currently set to 10 to allow users to run a smaller, quicker version of the simulation by default. You can assign any value to `n` that is greater than 1 to test these, and you can set `n <- 1000` to replicate the full simulation.
+The results shared in the corresponding publication are based on 1,000 repeats of the simulation. The number of repeats is determined by the value of `n` in line 20 of `_targets.R` and is currently set to 10 to allow users to run a smaller, quicker version of the simulation by default. You can replace "10" to assign any value to `n` that is greater than 1 to test these, and you can set `n <- 1000` to replicate the full simulation.
 
 ## Viewing Results
 
 Each table and figure has a corresponding "target," which can be read using `tar_read()` and loaded into your R environment using `tar_load()`. For example, the main tables and figures can be viewed in R by running the following lines:
 ```
-tar_read(exhibit1)
-tar_read(exhibit2)
-tar_read(exhibit3)
-tar_read(exhibit4)
+tar_read(figure2A)
+tar_read(figure2B)
+tar_read(table1)
+tar_read(table2)
 ```
 Supplementary tables and figures can also be read this way, by supplying the corresponding target names (e.g. "exhibitA13").
 
-Additionally, after running the pipeline, all main or supplementary figures and tables wil be saved in the "output" folder created in your local repository.
+Additionally, after running the pipeline, all main or supplementary figures and tables will be saved in the "output" folder created in your local repository.

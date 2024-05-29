@@ -1,5 +1,5 @@
 ## About
-This repository holds the data processing, simulation, and analysis code for the research project, "Simulating desegregation through affordable housing development: an environmental health impact assessment of Connecticut zoning law" by Saira Prasanth, Nire Oloyede, Xuezhixing Zhang, Kai Chen, and Daniel Carrión, 2024. A preprint is available through medRxiv here: https://doi.org/10.1101/2024.02.13.24302645
+This repository holds the data processing, simulation, and analysis code for the research project, "Simulating desegregation through affordable housing development: an environmental health impact assessment of Connecticut zoning law" by Saira Prasanth, Nire Oloyede, Xuezhixing Zhang, Kai Chen, and Daniel Carrión, 2024, available in Health & Place: https://doi.org/10.1016/j.healthplace.2024.103277
 
 ## Installation and Data Downloads
 First, install R version 4.2.0. R is available for free download from the R Project for Statistical Computing here: https://www.r-project.org/
